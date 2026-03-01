@@ -27,8 +27,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up binary sensor platform."""
-    stream_status_coordinator = entry.runtime_data.stream_status_coordinator
-    async_add_entities([YouTubeLiveChannelSensor(stream_status_coordinator, entry)])
+    runtime_data = entry.runtime_data
+    calendar_coordinator = runtime_data.calendar_coordinator
+    stream_status_coordinator = runtime_data.stream_status_coordinator
+
+    # Use the friendly channel name from stream data, fall back to handle
+    channel_name = entry.title
+    if calendar_coordinator.data:
+        channel_name = calendar_coordinator.data[0].channel
+
+    async_add_entities(
+        [YouTubeLiveChannelSensor(stream_status_coordinator, entry, channel_name)]
+    )
 
 
 class YouTubeLiveChannelSensor(
@@ -42,15 +52,16 @@ class YouTubeLiveChannelSensor(
         self,
         coordinator: StreamStatusCoordinator,
         entry: YouTubeLiveConfigEntry,
+        channel_name: str,
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_live"
-        self._attr_name = f"{entry.title} Live"
+        self._attr_name = f"{channel_name} Live"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            name=channel_name,
             entry_type=DeviceEntryType.SERVICE,
         )
 
