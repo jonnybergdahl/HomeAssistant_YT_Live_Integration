@@ -22,8 +22,8 @@
     },
     "entity": {
         "binary_sensor": {
-            "stream_live": {
-                "name": "{stream_title}"
+            "channel_live": {
+                "name": "{channel_name} Live"
             }
         }
     }

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import CalendarCoordinator, StreamStatusCoordinator
@@ -28,7 +27,6 @@ class YouTubeLiveRuntimeData:
 
     calendar_coordinator: CalendarCoordinator
     stream_status_coordinator: StreamStatusCoordinator
-    sensor_add_entities: AddEntitiesCallback | None = None
 
 
 @dataclass
