@@ -1,0 +1,30 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Dodavanje YouTube kanala",
+                "description": "Unesite korisničko ime YouTube kanala (s oznakom @) koji želite pratiti za prijenose uživo.",
+                "data": {
+                    "channel_handle": "Korisničko ime kanala (@...)"
+                },
+                "data_description": {
+                    "channel_handle": "Korisničko ime YouTube kanala, npr. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Povezivanje s YouTubeom nije uspjelo. Provjerite korisničko ime kanala i pokušajte ponovno.",
+            "unknown": "Neočekivana pogreška"
+        },
+        "abort": {
+            "already_configured": "Ovaj kanal je već dodan."
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "channel_live": {
+                "name": "Uživo"
+            }
+        }
+    }
+}
