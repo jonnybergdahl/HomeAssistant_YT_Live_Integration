@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import (
@@ -14,7 +15,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
 from .coordinator import StreamStatusCoordinator
 
 if TYPE_CHECKING:
@@ -28,8 +29,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up binary sensor platform."""
     runtime_data = entry.runtime_data
-    calendar_coordinator = runtime_data.calendar_coordinator
     stream_status_coordinator = runtime_data.stream_status_coordinator
+    calendar_coordinator = runtime_data.calendar_coordinator
 
     # Use the friendly channel name from stream data, fall back to handle
     channel_name = entry.title
@@ -57,13 +58,43 @@ class YouTubeLiveChannelSensor(
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self._entry = entry
+        self._channel_name = channel_name
         self._attr_unique_id = f"{entry.entry_id}_live"
-        self._attr_name = f"{channel_name} Live"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=channel_name,
             entry_type=DeviceEntryType.SERVICE,
         )
+
+    def _next_stream(self):
+        """Return the next upcoming or currently live stream."""
+        streams = self.coordinator.calendar_coordinator.data
+        if not streams:
+            return None
+        now = datetime.now().astimezone()
+        for stream in streams:
+            end = stream.scheduled_start + timedelta(
+                hours=DEFAULT_STREAM_DURATION_HOURS
+            )
+            if end > now:
+                return stream
+        return None
+
+    @property
+    def name(self) -> str:
+        """Return the name of the sensor (next stream title or channel fallback)."""
+        stream = self._next_stream()
+        if stream is not None:
+            return stream.title
+        return f"{self._channel_name} Live"
+
+    @property
+    def entity_picture(self) -> str | None:
+        """Return the thumbnail of the next scheduled stream."""
+        stream = self._next_stream()
+        if stream is not None:
+            return stream.thumbnail_url
+        return None
 
     @property
     def is_on(self) -> bool | None:
@@ -79,16 +110,13 @@ class YouTubeLiveChannelSensor(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
+        stream = self._next_stream()
         attrs: dict[str, Any] = {
-            "channel": self._entry.title,
+            "channel_handle": self._entry.title,
+            "channel_name": self._channel_name,
+            "url": stream.url if stream else None,
+            "stream_start": (
+                stream.scheduled_start.isoformat() if stream else None
+            ),
         }
-
-        if self.coordinator.data is not None:
-            live_streams = [
-                video_id
-                for video_id, status in self.coordinator.data.statuses.items()
-                if status.is_live
-            ]
-            attrs["live_streams"] = live_streams
-
         return attrs

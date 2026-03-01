@@ -78,7 +78,15 @@ async def test_channel_sensor_on_when_live(
     ]
     assert len(sensor_states) == 1
     assert sensor_states[0].state == "on"
-    assert "live1" in sensor_states[0].attributes.get("live_streams", [])
+
+    # Friendly name should be the stream title
+    assert sensor_states[0].attributes.get("friendly_name") == "Live Now"
+
+    # Attributes should reflect the live stream
+    attrs = sensor_states[0].attributes
+    assert attrs["url"] == f"https://www.youtube.com/watch?v=live1"
+    assert attrs["channel_handle"] == "@TestChannel"
+    assert attrs["channel_name"] == "Test Channel"
 
 
 async def test_channel_sensor_attributes(
@@ -97,5 +105,53 @@ async def test_channel_sensor_attributes(
     ]
     assert len(sensor_states) == 1
     state = sensor_states[0]
-    assert state.attributes["channel"] == "@TestChannel"
-    assert state.attributes["live_streams"] == []
+
+    # Friendly name should be the next stream title
+    assert state.attributes.get("friendly_name") == "Morning Stream"
+
+    # entity_picture should be the next stream's thumbnail
+    assert state.attributes.get("entity_picture") is not None
+    assert "stream1" in state.attributes["entity_picture"]
+
+    # Channel info
+    assert state.attributes["channel_handle"] == "@TestChannel"
+    assert state.attributes["channel_name"] == "Test Channel"
+
+    # Stream info
+    assert state.attributes["url"] == "https://www.youtube.com/watch?v=stream1"
+    assert state.attributes["stream_start"] is not None
+
+
+async def test_channel_sensor_no_streams(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_is_stream_live,
+) -> None:
+    """Test channel sensor fallback when no streams exist."""
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[],
+    ):
+        mock_config_entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    sensor_states = [
+        s for s in hass.states.async_all() if s.domain == "binary_sensor"
+    ]
+    assert len(sensor_states) == 1
+    state = sensor_states[0]
+
+    # Friendly name falls back to channel name + Live
+    assert state.attributes.get("friendly_name") == "@TestChannel Live"
+
+    # No entity_picture when no streams
+    assert state.attributes.get("entity_picture") is None
+
+    # Stream attributes are None
+    assert state.attributes["url"] is None
+    assert state.attributes["stream_start"] is None
+
+    # Channel info still present
+    assert state.attributes["channel_handle"] == "@TestChannel"
+    assert state.attributes["channel_name"] == "@TestChannel"
