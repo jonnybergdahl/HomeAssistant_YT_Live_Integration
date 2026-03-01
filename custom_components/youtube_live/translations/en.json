@@ -1,0 +1,35 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Add YouTube channel",
+                "description": "Enter the handle of the YouTube channel you want to monitor for live streams.",
+                "data": {
+                    "channel_handle": "Channel handle"
+                },
+                "data_description": {
+                    "channel_handle": "The YouTube channel handle, e.g. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Could not connect to YouTube. Check the channel handle and try again.",
+            "unknown": "Unexpected error"
+        },
+        "abort": {
+            "already_configured": "This channel is already configured."
+        }
+    },
+    "entity": {
+        "calendar": {
+            "schedule": {
+                "name": "Schedule"
+            }
+        },
+        "binary_sensor": {
+            "stream_live": {
+                "name": "{stream_title}"
+            }
+        }
+    }
+}

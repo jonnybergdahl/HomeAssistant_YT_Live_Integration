@@ -1,0 +1,35 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Lägg till YouTube-kanal",
+                "description": "Ange handle för den YouTube-kanal du vill bevaka för liveströmmar.",
+                "data": {
+                    "channel_handle": "Kanalens handle"
+                },
+                "data_description": {
+                    "channel_handle": "YouTube-kanalens handle, t.ex. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Kunde inte ansluta till YouTube. Kontrollera namn på handle och försök igen.",
+            "unknown": "Oväntat fel"
+        },
+        "abort": {
+            "already_configured": "Denna kanal är redan konfigurerad."
+        }
+    },
+    "entity": {
+        "calendar": {
+            "schedule": {
+                "name": "Schema"
+            }
+        },
+        "binary_sensor": {
+            "stream_live": {
+                "name": "{stream_title}"
+            }
+        }
+    }
+}

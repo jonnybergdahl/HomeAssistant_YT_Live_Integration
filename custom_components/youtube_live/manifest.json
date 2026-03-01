@@ -1,0 +1,13 @@
+{
+    "domain": "youtube_live",
+    "name": "YouTube Live",
+    "codeowners": ["@jonnybergdahl"],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/jonnybergdahl/HomeAssistant_YT_Live_Integration",
+    "integration_type": "service",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/issues",
+    "requirements": ["yt-live-scraper==0.1.0"],
+    "version": "0.1.0"
+}
