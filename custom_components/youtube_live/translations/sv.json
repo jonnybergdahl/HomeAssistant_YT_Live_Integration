@@ -21,11 +21,6 @@
         }
     },
     "entity": {
-        "calendar": {
-            "schedule": {
-                "name": "Schema"
-            }
-        },
         "binary_sensor": {
             "stream_live": {
                 "name": "{stream_title}"
