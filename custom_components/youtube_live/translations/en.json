@@ -23,7 +23,7 @@
     "entity": {
         "binary_sensor": {
             "channel_live": {
-                "name": "{channel_name} Live"
+                "name": "Live"
             }
         }
     }

@@ -47,7 +47,7 @@ async def test_calendar_next_event(
     ]
     assert len(calendar_states) == 1
     state = calendar_states[0]
-    assert state.attributes.get("message") == "Morning Stream"
+    assert state.attributes.get("message") == "Test Channel - Morning Stream"
 
 
 async def test_calendar_get_events(
@@ -170,7 +170,7 @@ async def test_single_calendar_multiple_channels(
 
     # Calendar should show the nearest event (Channel B Stream at +1h)
     state = calendar_states[0]
-    assert state.attributes.get("message") == "Channel B Stream"
+    assert state.attributes.get("message") == "Channel B - Channel B Stream"
 
     # get_events should return both streams
     entity_id = state.entity_id
@@ -233,7 +233,7 @@ async def test_calendar_updates_when_channel_added(
     ]
     assert len(calendar_states) == 1
     state = calendar_states[0]
-    assert state.attributes.get("message") == "Channel A Stream"
+    assert state.attributes.get("message") == "Channel A - Channel A Stream"
     entity_id = state.entity_id
 
     events = await hass.services.async_call(
@@ -268,7 +268,7 @@ async def test_calendar_updates_when_channel_added(
     # Calendar should now show Channel B's nearer stream as next event
     state = hass.states.get(entity_id)
     assert state is not None
-    assert state.attributes.get("message") == "Channel B Stream"
+    assert state.attributes.get("message") == "Channel B - Channel B Stream"
 
     # get_events should return both streams
     events = await hass.services.async_call(
@@ -350,4 +350,4 @@ async def test_calendar_survives_entry_removal(
     ]
     assert len(calendar_states) == 1
     state = calendar_states[0]
-    assert state.attributes.get("message") == "Channel B Stream"
+    assert state.attributes.get("message") == "Channel B - Channel B Stream"

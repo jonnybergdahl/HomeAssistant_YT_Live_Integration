@@ -97,7 +97,7 @@ class YouTubeLiveCalendar(CalendarEntity):
             start=stream.scheduled_start,
             end=stream.scheduled_start
             + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS),
-            summary=stream.title,
+            summary=f"{stream.channel} - {stream.title}",
             description=stream.url,
             uid=stream.video_id,
         )
