@@ -36,7 +36,6 @@ class YouTubeLiveChannelSensor(
 ):
     """Binary sensor indicating whether a YouTube channel is currently live."""
 
-    _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.RUNNING
 
     def __init__(
@@ -48,7 +47,7 @@ class YouTubeLiveChannelSensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_live"
-        self._attr_name = "Live"
+        self._attr_name = f"{entry.title} Live"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
