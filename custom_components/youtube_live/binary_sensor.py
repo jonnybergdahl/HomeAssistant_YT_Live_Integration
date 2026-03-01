@@ -47,7 +47,6 @@ class YouTubeLiveChannelSensor(
 ):
     """Binary sensor indicating whether a YouTube channel is currently live."""
 
-    _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.RUNNING
 
     def __init__(
@@ -61,7 +60,7 @@ class YouTubeLiveChannelSensor(
         self._entry = entry
         self._channel_name = channel_name
         self._attr_unique_id = f"{entry.entry_id}_live"
-        self._attr_name = "Live"
+        self._attr_suggested_object_id = f"{channel_name} live"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=channel_name,
@@ -81,6 +80,14 @@ class YouTubeLiveChannelSensor(
             if end > now:
                 return stream
         return None
+
+    @property
+    def name(self) -> str:
+        """Return the stream title or channel fallback as friendly name."""
+        stream = self._next_stream()
+        if stream is not None:
+            return stream.title
+        return f"{self._channel_name} Live"
 
     @property
     def entity_picture(self) -> str | None:
@@ -108,7 +115,6 @@ class YouTubeLiveChannelSensor(
         attrs: dict[str, Any] = {
             "channel_handle": self._entry.title,
             "channel_name": self._channel_name,
-            "stream_title": stream.title if stream else None,
             "url": stream.url if stream else None,
             "stream_start": (
                 stream.scheduled_start.isoformat() if stream else None

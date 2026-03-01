@@ -79,9 +79,9 @@ async def test_channel_sensor_on_when_live(
     assert len(sensor_states) == 1
     assert sensor_states[0].state == "on"
 
-    # Attributes should reflect the live stream
+    # Friendly name should be the stream title
     attrs = sensor_states[0].attributes
-    assert attrs["stream_title"] == "Live Now"
+    assert attrs["friendly_name"] == "Live Now"
     assert attrs["url"] == "https://www.youtube.com/watch?v=live1"
     assert attrs["channel_handle"] == "@TestChannel"
     assert attrs["channel_name"] == "Test Channel"
@@ -104,8 +104,8 @@ async def test_channel_sensor_attributes(
     assert len(sensor_states) == 1
     state = sensor_states[0]
 
-    # Stream title should be the next stream's title
-    assert state.attributes["stream_title"] == "Morning Stream"
+    # Friendly name should be the next stream's title
+    assert state.attributes["friendly_name"] == "Morning Stream"
 
     # entity_picture should be the next stream's thumbnail
     assert state.attributes.get("entity_picture") is not None
@@ -140,9 +140,11 @@ async def test_channel_sensor_no_streams(
     assert len(sensor_states) == 1
     state = sensor_states[0]
 
+    # Friendly name falls back to channel + Live
+    assert state.attributes["friendly_name"] == "@TestChannel Live"
+
     # No entity_picture or stream info when no streams
     assert state.attributes.get("entity_picture") is None
-    assert state.attributes["stream_title"] is None
     assert state.attributes["url"] is None
     assert state.attributes["stream_start"] is None
 
