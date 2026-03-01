@@ -1,0 +1,30 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Voeg een YouTube-kanaal toe",
+                "description": "Voer de YouTube-handle van het kanaal in waarvan u de live streams wilt volgen.",
+                "data": {
+                    "channel_handle": "Kanaal-handle"
+                },
+                "data_description": {
+                    "channel_handle": "De YouTube-handle van een kanaal, i.e. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Kan geen verbinding maken met YouTube. Controleer de kanaal-handle en probeer het opnieuw.",
+            "unknown": "Onbekende fout."
+        },
+        "abort": {
+            "already_configured": "Dit YouTube-kanaal is al toegevoegd."
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "channel_live": {
+                "name": "Live"
+            }
+        }
+    }
+}
