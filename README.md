@@ -38,6 +38,14 @@ Click the button to add a YouTube Live channel to Home Assistant.
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=youtube_live)
 
+Enter the handle of the Youtube channel and click _Submit_.
+
+![Add channel](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/add.png)
+
+Optionally select an area and click _Skip and finish_.
+
+![Add area](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/area.png)
+
 You can also set it up manually:
 
 1. Go to **Settings** > **Devices & services** > **Add integration**
@@ -53,9 +61,13 @@ To monitor multiple channels, repeat the setup for each channel.
 
 A single **YouTube Live Streams** calendar entity is created that aggregates upcoming live streams from all monitored channels. The calendar is updated once per hour.
 
+![Calendar](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/calendar.png)
+
 ### Binary sensor
 
-Each channel gets a binary sensor named **\<channel\> Live** (e.g. `@home_assistant Live`). The sensor turns **on** when any stream on the channel is live and **off** otherwise.
+Each channel gets a binary sensor (e.g. `binary_sensor.home_assistant_live`). The sensor turns **on** when any stream on the channel is live and **off** otherwise.
+
+The friendly name dynamically shows the title of the next upcoming or current stream. When no streams are scheduled it falls back to **\<channel\> Live**. The entity picture shows the stream thumbnail.
 
 Live status polling starts 15 minutes before the scheduled start time and runs every minute. Polling stops when the stream ends, or 15 minutes after the scheduled start time if the stream never started.
 
@@ -63,5 +75,7 @@ Each binary sensor includes extra state attributes:
 
 | Attribute | Description |
 |---|---|
-| `channel` | Channel handle |
-| `live_streams` | List of video IDs currently live on the channel |
+| `channel_handle` | Channel handle (e.g. `@home_assistant`) |
+| `channel_name` | Channel display name (e.g. `Home Assistant`) |
+| `url` | URL of the next upcoming or current stream |
+| `stream_start` | Scheduled start time (ISO 8601) |
