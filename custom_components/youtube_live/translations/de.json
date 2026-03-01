@@ -1,0 +1,30 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "YouTube-Kanal hinzufügen",
+                "description": "Handle des YouTube-Kanals hinzufügen, den du auf Livestreams überwachen möchtest.",
+                "data": {
+                    "channel_handle": "YouTube-Handle"
+                },
+                "data_description": {
+                    "channel_handle": "Der YouTube-Handle, z.B. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Konnte nicht mit YouTube verbinden. Überprüfe das Kanal-Handle und versuche es erneut.",
+            "unknown": "Unbekannter Fehler"
+        },
+        "abort": {
+            "already_configured": "Dieser Kanal ist bereits konfiguriert."
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "channel_live": {
+                "name": "{channel_name} Live"
+            }
+        }
+    }
+}
