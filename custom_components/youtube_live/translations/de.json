@@ -13,7 +13,8 @@
             }
         },
         "error": {
-            "cannot_connect": "Konnte nicht mit YouTube verbinden. Überprüfe das Kanal-Handle und versuche es erneut.",
+            "cannot_connect": "Konnte nicht mit YouTube verbinden. Bitte versuche es später erneut.",
+            "channel_not_found": "Kanal wurde auf YouTube nicht gefunden. Überprüfe das Handle und versuche es erneut (Handles sind case-sensitive).",
             "unknown": "Unbekannter Fehler"
         },
         "abort": {

@@ -13,7 +13,8 @@
             }
         },
         "error": {
-            "cannot_connect": "Could not connect to YouTube. Check the channel handle and try again.",
+            "cannot_connect": "Could not connect to YouTube. Please try again later.",
+            "channel_not_found": "Channel not found on YouTube. Check the handle and try again (handles are case-sensitive).",
             "unknown": "Unexpected error"
         },
         "abort": {

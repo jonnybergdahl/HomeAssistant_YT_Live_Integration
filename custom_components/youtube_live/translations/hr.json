@@ -13,7 +13,8 @@
             }
         },
         "error": {
-            "cannot_connect": "Povezivanje s YouTubeom nije uspjelo. Provjerite korisničko ime kanala i pokušajte ponovno.",
+            "cannot_connect": "Povezivanje s YouTubeom nije uspjelo. Pokušajte ponovno kasnije.",
+            "channel_not_found": "Kanal nije pronađen na YouTubeu. Provjerite korisničko ime i pokušajte ponovno (korisničko ime razlikuje velika i mala slova).",
             "unknown": "Neočekivana pogreška"
         },
         "abort": {

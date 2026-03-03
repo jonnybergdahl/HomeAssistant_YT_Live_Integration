@@ -13,7 +13,8 @@
             }
         },
         "error": {
-            "cannot_connect": "Kunde inte ansluta till YouTube. Kontrollera namn på handle och försök igen.",
+            "cannot_connect": "Kunde inte ansluta till YouTube. Försök igen senare.",
+            "channel_not_found": "Kanalen hittades inte på YouTube. Kontrollera handle och försök igen (handle är skiftlägeskänsligt).",
             "unknown": "Oväntat fel"
         },
         "abort": {

@@ -54,6 +54,9 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
 
     async def _async_update_data(self) -> list[UpcomingStream]:
         """Fetch upcoming streams from YouTube."""
+        _LOGGER.debug(
+            "Fetching upcoming streams for %s", self.channel_handle
+        )
         try:
             streams: list[UpcomingStream] = await self.hass.async_add_executor_job(
                 get_upcoming_streams, [self.channel_handle]
@@ -62,6 +65,12 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
             raise UpdateFailed(
                 f"Error fetching streams for {self.channel_handle}: {err}"
             ) from err
+        _LOGGER.debug(
+            "Found %d upcoming stream(s) for %s: %s",
+            len(streams),
+            self.channel_handle,
+            [f"{s.video_id} ({s.title})" for s in streams],
+        )
         return streams
 
 
@@ -119,6 +128,11 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
 
         # Clean up states for streams no longer in calendar data
         known_ids = {s.video_id for s in streams}
+        removed = set(self._stream_states) - known_ids
+        if removed:
+            _LOGGER.debug(
+                "Removing stale stream states: %s", removed
+            )
         self._stream_states = {
             vid: state
             for vid, state in self._stream_states.items()
@@ -131,6 +145,11 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
 
             video_id = stream.video_id
             if video_id not in self._stream_states:
+                _LOGGER.debug(
+                    "Stream %s (%s) entered active window, starting polling",
+                    video_id,
+                    stream.title,
+                )
                 self._stream_states[video_id] = StreamStatus()
 
             state = self._stream_states[video_id]
@@ -150,14 +169,27 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
 
             state.is_live = live
 
-            if live:
+            if live and not state.was_live:
+                _LOGGER.info(
+                    "Stream %s (%s) is now live", video_id, stream.title
+                )
+                state.was_live = True
+            elif live:
                 state.was_live = True
             elif state.was_live:
                 # Stream was live but is no longer — it ended
+                _LOGGER.info(
+                    "Stream %s (%s) has ended", video_id, stream.title
+                )
                 state.is_live = False
                 state.ended = True
             elif now > stream.scheduled_start + timedelta(minutes=ACTIVE_WINDOW_MINUTES):
                 # Past the active window and never went live
+                _LOGGER.debug(
+                    "Stream %s (%s) passed active window without going live",
+                    video_id,
+                    stream.title,
+                )
                 state.ended = True
 
         return StreamStatusData(statuses=dict(self._stream_states))

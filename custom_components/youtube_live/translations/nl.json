@@ -13,7 +13,8 @@
             }
         },
         "error": {
-            "cannot_connect": "Kan geen verbinding maken met YouTube. Controleer de kanaal-handle en probeer het opnieuw.",
+            "cannot_connect": "Kan geen verbinding maken met YouTube. Probeer het later opnieuw.",
+            "channel_not_found": "Kanaal niet gevonden op YouTube. Controleer de handle en probeer het opnieuw (handles zijn hoofdlettergevoelig).",
             "unknown": "Onbekende fout."
         },
         "abort": {
