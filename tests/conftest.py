@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
-from yt_live_scraper import UpcomingStream
+from yt_live_scraper import StreamLiveStatus, UpcomingStream
 
 from homeassistant.core import HomeAssistant
 
@@ -87,7 +87,7 @@ def mock_is_stream_live():
     """Mock is_stream_live."""
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
-        return_value=False,
+        return_value=StreamLiveStatus(is_live=False),
     ) as mock_fn:
         yield mock_fn
 

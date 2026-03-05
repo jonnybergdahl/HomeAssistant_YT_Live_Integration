@@ -8,6 +8,8 @@ from unittest.mock import patch
 import pytest
 from homeassistant.core import HomeAssistant
 
+from yt_live_scraper import StreamLiveStatus
+
 from custom_components.youtube_live.coordinator import (
     CalendarCoordinator,
     StreamStatus,
@@ -125,7 +127,7 @@ async def test_stream_status_detects_live(
 
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
-        return_value=True,
+        return_value=StreamLiveStatus(is_live=True),
     ):
         stream_coordinator = StreamStatusCoordinator(
             hass, mock_config_entry, calendar_coordinator
@@ -160,7 +162,7 @@ async def test_stream_status_detects_ended(
     # First update: stream is live
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
-        return_value=True,
+        return_value=StreamLiveStatus(is_live=True),
     ):
         stream_coordinator = StreamStatusCoordinator(
             hass, mock_config_entry, calendar_coordinator
@@ -172,7 +174,7 @@ async def test_stream_status_detects_ended(
     # Second update: stream ended
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
-        return_value=False,
+        return_value=StreamLiveStatus(is_live=False),
     ):
         await stream_coordinator.async_refresh()
 
@@ -180,3 +182,41 @@ async def test_stream_status_detects_ended(
     assert status.is_live is False
     assert status.was_live is True
     assert status.ended is True
+
+
+async def test_stream_status_corrects_start_time(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test that scheduled_start is corrected from the player response."""
+    now = datetime.now(timezone.utc)
+    # Simulate a live stream whose scheduled_start was set to "now"
+    # (which happens after a HA restart for live streams without upcomingEventData)
+    stream = make_stream(
+        video_id="live_corrected",
+        title="Already Live",
+        scheduled_start=now,
+        live=True,
+    )
+    actual_start = now - timedelta(hours=2)
+
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        mock_config_entry.add_to_hass(hass)
+        calendar_coordinator = CalendarCoordinator(hass, mock_config_entry)
+        await calendar_coordinator.async_refresh()
+
+    with patch(
+        "custom_components.youtube_live.coordinator.is_stream_live",
+        return_value=StreamLiveStatus(is_live=True, actual_start=actual_start),
+    ):
+        stream_coordinator = StreamStatusCoordinator(
+            hass, mock_config_entry, calendar_coordinator
+        )
+        await stream_coordinator.async_refresh()
+
+    # The stream's scheduled_start should be corrected to the actual start time
+    assert stream.scheduled_start == actual_start
+    assert stream_coordinator.data.statuses["live_corrected"].is_live is True

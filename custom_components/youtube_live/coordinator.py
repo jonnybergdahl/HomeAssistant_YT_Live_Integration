@@ -7,7 +7,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
-from yt_live_scraper import UpcomingStream, get_upcoming_streams, is_stream_live
+from yt_live_scraper import StreamLiveStatus, UpcomingStream, get_upcoming_streams, is_stream_live
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -158,7 +158,7 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
                 continue
 
             try:
-                live = await self.hass.async_add_executor_job(
+                result: StreamLiveStatus = await self.hass.async_add_executor_job(
                     is_stream_live, video_id
                 )
             except Exception:
@@ -166,6 +166,22 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
                     "Error checking live status for %s", video_id, exc_info=True
                 )
                 continue
+
+            live = result.is_live
+
+            # Correct the scheduled_start when the player response
+            # provides the actual broadcast start time.  This fixes the
+            # calendar showing "now" instead of the original time after
+            # a Home Assistant restart while a stream is already live.
+            if result.actual_start is not None:
+                if stream.scheduled_start != result.actual_start:
+                    _LOGGER.debug(
+                        "Correcting scheduled_start for %s from %s to %s",
+                        video_id,
+                        stream.scheduled_start,
+                        result.actual_start,
+                    )
+                    stream.scheduled_start = result.actual_start
 
             state.is_live = live
 

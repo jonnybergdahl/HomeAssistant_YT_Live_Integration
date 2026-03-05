@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from yt_live_scraper import StreamLiveStatus
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -66,7 +67,7 @@ async def test_channel_sensor_on_when_live(
         ),
         patch(
             "custom_components.youtube_live.coordinator.is_stream_live",
-            return_value=True,
+            return_value=StreamLiveStatus(is_live=True),
         ),
     ):
         mock_config_entry.add_to_hass(hass)
