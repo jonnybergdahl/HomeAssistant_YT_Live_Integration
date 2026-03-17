@@ -76,6 +76,15 @@ class YouTubeLiveChannelSensor(
         streams = self.coordinator.calendar_coordinator.data
         if not streams:
             return None
+
+        # 1. Check if any stream is currently marked as live in the coordinator
+        live_statuses = self.coordinator.data.statuses if self.coordinator.data else {}
+        for stream in streams:
+            status = live_statuses.get(stream.video_id)
+            if status and status.is_live:
+                return stream
+
+        # 2. Fall back to the next upcoming stream based on scheduled end time
         now = datetime.now().astimezone()
         for stream in streams:
             end = stream.scheduled_start + timedelta(

@@ -140,10 +140,20 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         }
 
         for stream in streams:
-            if not self._is_in_active_window(stream):
+            video_id = stream.video_id
+            state = self._stream_states.get(video_id)
+            if state and state.is_live:
+                # Keep polling if currently live
+                _LOGGER.debug("Stream %s is live, continuing to poll", video_id)
+                pass
+            elif stream.live:
+                # If the scraper already says it's live, we should poll it
+                _LOGGER.debug("Stream %s is marked as live by scraper, starting polling", video_id)
+                pass
+            elif not self._is_in_active_window(stream):
+                _LOGGER.debug("Stream %s is outside active window, skipping", video_id)
                 continue
 
-            video_id = stream.video_id
             if video_id not in self._stream_states:
                 _LOGGER.debug(
                     "Stream %s (%s) entered active window, starting polling",

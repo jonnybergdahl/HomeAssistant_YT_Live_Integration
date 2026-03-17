@@ -44,6 +44,7 @@ def make_stream(
         scheduled_start = datetime.now(timezone.utc) + timedelta(hours=1)
     return UpcomingStream(
         channel=channel,
+        channel_id="UC_mock_channel_id",
         channel_thumbnail_url="https://example.com/thumb.jpg",
         video_id=video_id,
         title=title,
