@@ -119,6 +119,7 @@ class YouTubeLiveChannelSensor(
         attrs: dict[str, Any] = {
             "channel_handle": self._entry.title,
             "channel_name": self._channel_name,
+            "stream_id": stream.video_id if stream else None,
             "url": stream.url if stream else None,
             "stream_start": (
                 stream.scheduled_start.isoformat() if stream else None
