@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
 from .coordinator import StreamStatusCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from . import YouTubeLiveConfigEntry
@@ -75,23 +78,33 @@ class YouTubeLiveChannelSensor(
         """Return the next upcoming or currently live stream."""
         streams = self.coordinator.calendar_coordinator.data
         if not streams:
+            _LOGGER.debug("No streams available in calendar_coordinator")
             return None
 
         # 1. Check if any stream is currently marked as live in the coordinator
         live_statuses = self.coordinator.data.statuses if self.coordinator.data else {}
+        _LOGGER.debug(
+            "Checking for live streams. Current live statuses: %s",
+            {vid: s.is_live for vid, s in live_statuses.items()},
+        )
         for stream in streams:
             status = live_statuses.get(stream.video_id)
             if status and status.is_live:
+                _LOGGER.debug("Found live stream: %s", stream.video_id)
                 return stream
 
         # 2. Fall back to the next upcoming stream based on scheduled end time
         now = datetime.now().astimezone()
+        _LOGGER.debug("No live streams found. Checking for next upcoming stream (now=%s)", now)
         for stream in streams:
             end = stream.scheduled_start + timedelta(
                 hours=DEFAULT_STREAM_DURATION_HOURS
             )
             if end > now:
+                _LOGGER.debug("Selected next upcoming stream: %s (ends at %s)", stream.video_id, end)
                 return stream
+
+        _LOGGER.debug("No upcoming streams found")
         return None
 
     @property
@@ -134,4 +147,5 @@ class YouTubeLiveChannelSensor(
                 stream.scheduled_start.isoformat() if stream else None
             ),
         }
+        _LOGGER.debug("Extra state attributes for %s: %s", self.entity_id, attrs)
         return attrs

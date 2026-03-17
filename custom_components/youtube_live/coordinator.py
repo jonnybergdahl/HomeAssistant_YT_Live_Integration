@@ -62,6 +62,9 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
                 get_upcoming_streams, [self.channel_handle]
             )
         except Exception as err:
+            _LOGGER.error(
+                "Error fetching streams for %s: %s", self.channel_handle, err, exc_info=True
+            )
             raise UpdateFailed(
                 f"Error fetching streams for {self.channel_handle}: {err}"
             ) from err
@@ -126,6 +129,12 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         streams = self.calendar_coordinator.data or []
         now = dt_util.utcnow()
 
+        _LOGGER.debug(
+            "StreamStatusCoordinator updating. Current calendar data has %d streams: %s",
+            len(streams),
+            [s.video_id for s in streams],
+        )
+
         # Clean up states for streams no longer in calendar data
         known_ids = {s.video_id for s in streams}
         removed = set(self._stream_states) - known_ids
@@ -165,9 +174,11 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
             state = self._stream_states[video_id]
 
             if state.ended:
+                _LOGGER.debug("Stream %s has already ended, skipping poll", video_id)
                 continue
 
             try:
+                _LOGGER.debug("Polling live status for stream %s", video_id)
                 result: StreamLiveStatus = await self.hass.async_add_executor_job(
                     is_stream_live, video_id
                 )
@@ -195,6 +206,13 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
 
             state.is_live = live
 
+            _LOGGER.debug(
+                "Stream %s poll result: is_live=%s, actual_start=%s",
+                video_id,
+                live,
+                result.actual_start,
+            )
+
             if live and not state.was_live:
                 _LOGGER.info(
                     "Stream %s (%s) is now live", video_id, stream.title
@@ -218,4 +236,8 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
                 )
                 state.ended = True
 
+        _LOGGER.debug(
+            "StreamStatusCoordinator update finished. Current states: %s",
+            {vid: f"live={s.is_live}, ended={s.ended}" for vid, s in self._stream_states.items()},
+        )
         return StreamStatusData(statuses=dict(self._stream_states))
