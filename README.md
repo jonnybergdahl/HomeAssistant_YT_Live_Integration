@@ -79,3 +79,14 @@ Each binary sensor includes extra state attributes:
 | `channel_name` | Channel display name (e.g. `Home Assistant`) |
 | `url` | URL of the next upcoming or current stream |
 | `stream_start` | Scheduled start time (ISO 8601) |
+
+# Usage
+
+To get a single sensor that tells if any Youtube channel is live, create a binary Template sensor
+
+Show as: Running<br/>
+State:
+```yaml
+{{ integration_entities('youtube_live') 
+   | select('is_state', 'on') 
+   | list | count > 0 }}```
