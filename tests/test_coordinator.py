@@ -28,9 +28,13 @@ async def test_calendar_coordinator_fetches_streams(
     mock_streams,
 ) -> None:
     """Test that the calendar coordinator fetches streams."""
-    mock_config_entry.add_to_hass(hass)
-    coordinator = CalendarCoordinator(hass, mock_config_entry)
-    await coordinator.async_refresh()
+    with patch(
+        "custom_components.youtube_live.coordinator.get_channel",
+        return_value="Test Channel",
+    ):
+        mock_config_entry.add_to_hass(hass)
+        coordinator = CalendarCoordinator(hass, mock_config_entry)
+        await coordinator.async_refresh()
 
     assert coordinator.data is not None
     assert len(coordinator.data) == 2
@@ -40,6 +44,30 @@ async def test_calendar_coordinator_fetches_streams(
 
     # Verify that the config entry title was updated to the friendly name
     assert mock_config_entry.title == "Test Channel"
+
+
+async def test_calendar_coordinator_no_streams_updates_title(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test that the calendar coordinator updates title even with no streams."""
+    with (
+        patch(
+            "custom_components.youtube_live.coordinator.get_upcoming_streams",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.youtube_live.coordinator.get_channel",
+            return_value="Friendly Name",
+        ) as mock_get_channel,
+    ):
+        mock_config_entry.add_to_hass(hass)
+        coordinator = CalendarCoordinator(hass, mock_config_entry)
+        await coordinator.async_refresh()
+
+        assert len(coordinator.data) == 0
+        assert mock_config_entry.title == "Friendly Name"
+        mock_get_channel.assert_called_once_with("@TestChannel")
 
 
 async def test_calendar_coordinator_handles_error(

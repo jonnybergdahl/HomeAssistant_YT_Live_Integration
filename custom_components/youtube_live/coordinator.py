@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from yt_live_scraper import StreamLiveStatus, UpcomingStream, get_upcoming_streams, is_stream_live
+from yt_live_scraper.scraper import get_channel
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -75,18 +76,28 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
             [f"{s.video_id} ({s.title})" for s in streams],
         )
 
+        friendly_name = None
         if streams:
             # Update the config entry title to the friendly channel name
             friendly_name = streams[0].channel
-            if friendly_name and self.config_entry.title != friendly_name:
-                _LOGGER.debug(
-                    "Updating config entry title for %s to %s",
-                    self.channel_handle,
-                    friendly_name,
+        else:
+            # No streams found, try to get the channel name directly
+            try:
+                friendly_name = await self.hass.async_add_executor_job(
+                    get_channel, self.channel_handle
                 )
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, title=friendly_name
-                )
+            except Exception as err:
+                _LOGGER.warning("Could not fetch channel name for %s: %s", self.channel_handle, err)
+
+        if friendly_name and self.config_entry.title != friendly_name:
+            _LOGGER.debug(
+                "Updating config entry title for %s to %s",
+                self.channel_handle,
+                friendly_name,
+            )
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, title=friendly_name
+            )
 
         return streams
 

@@ -91,9 +91,15 @@ async def test_calendar_empty(
     mock_is_stream_live,
 ) -> None:
     """Test calendar with no streams."""
-    with patch(
-        "custom_components.youtube_live.coordinator.get_upcoming_streams",
-        return_value=[],
+    with (
+        patch(
+            "custom_components.youtube_live.coordinator.get_upcoming_streams",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.youtube_live.coordinator.get_channel",
+            return_value="Test Channel",
+        ),
     ):
         mock_config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(mock_config_entry.entry_id)

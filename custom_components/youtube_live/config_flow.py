@@ -7,7 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from yt_live_scraper import UpcomingStream
+from yt_live_scraper.scraper import get_channel
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
@@ -40,11 +40,11 @@ class YouTubeLiveConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Validating YouTube channel handle: %s", handle)
 
             try:
-                exists = await self.hass.async_add_executor_job(
-                    UpcomingStream.exists, handle
+                friendly_name = await self.hass.async_add_executor_job(
+                    get_channel, handle
                 )
 
-                if not exists:
+                if not friendly_name:
                     _LOGGER.warning(
                         "Channel not found on YouTube: %s", handle
                     )
@@ -56,13 +56,13 @@ class YouTubeLiveConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             else:
                 if not errors:
-                    _LOGGER.debug("Channel validated successfully: %s", handle)
+                    _LOGGER.debug("Channel validated successfully: %s (%s)", handle, friendly_name)
                     unique_id = handle.lower()
                     await self.async_set_unique_id(unique_id)
                     self._abort_if_unique_id_configured()
 
                     return self.async_create_entry(
-                        title=handle,
+                        title=friendly_name or handle,
                         data={CONF_CHANNEL_HANDLE: handle},
                     )
 

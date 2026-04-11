@@ -15,7 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 async def test_full_user_flow(
     hass: HomeAssistant,
-    mock_config_flow_channel_exists,
+    mock_get_channel,
 ) -> None:
     """Test a successful config flow."""
     result = await hass.config_entries.flow.async_init(
@@ -30,14 +30,14 @@ async def test_full_user_flow(
         {CONF_CHANNEL_HANDLE: "@TestChannel"},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "@TestChannel"
+    assert result["title"] == "Test Channel"
     assert result["data"] == {CONF_CHANNEL_HANDLE: "@TestChannel"}
-    mock_config_flow_channel_exists.assert_called_once_with("@TestChannel")
+    mock_get_channel.assert_called_once_with("@TestChannel")
 
 
 async def test_flow_adds_at_prefix(
     hass: HomeAssistant,
-    mock_config_flow_channel_exists,
+    mock_get_channel,
 ) -> None:
     """Test that the flow adds @ prefix if missing."""
     result = await hass.config_entries.flow.async_init(
@@ -50,14 +50,14 @@ async def test_flow_adds_at_prefix(
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_CHANNEL_HANDLE] == "@TestChannel"
-    mock_config_flow_channel_exists.assert_called_once_with("@TestChannel")
+    mock_get_channel.assert_called_once_with("@TestChannel")
 
 
 async def test_flow_channel_not_found(hass: HomeAssistant) -> None:
     """Test config flow when channel handle is not found on YouTube."""
     with patch(
-        "custom_components.youtube_live.config_flow.UpcomingStream.exists",
-        return_value=False,
+        "custom_components.youtube_live.config_flow.get_channel",
+        return_value=None,
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -74,7 +74,7 @@ async def test_flow_channel_not_found(hass: HomeAssistant) -> None:
 async def test_flow_cannot_connect(hass: HomeAssistant) -> None:
     """Test config flow when YouTube is unreachable."""
     with patch(
-        "custom_components.youtube_live.config_flow.UpcomingStream.exists",
+        "custom_components.youtube_live.config_flow.get_channel",
         side_effect=Exception("Connection error"),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -91,7 +91,7 @@ async def test_flow_cannot_connect(hass: HomeAssistant) -> None:
 
 async def test_flow_already_configured(
     hass: HomeAssistant,
-    mock_config_flow_channel_exists,
+    mock_get_channel,
 ) -> None:
     """Test that we abort if channel is already configured."""
     entry = MockConfigEntry(

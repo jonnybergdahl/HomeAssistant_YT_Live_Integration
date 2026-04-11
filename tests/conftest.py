@@ -94,10 +94,10 @@ def mock_is_stream_live():
 
 
 @pytest.fixture
-def mock_config_flow_channel_exists():
-    """Mock channel existence check for config flow."""
+def mock_get_channel():
+    """Mock get_channel."""
     with patch(
-        "custom_components.youtube_live.config_flow.UpcomingStream.exists",
-        return_value=True,
+        "custom_components.youtube_live.config_flow.get_channel",
+        return_value="Test Channel",
     ) as mock_fn:
         yield mock_fn
