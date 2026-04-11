@@ -129,12 +129,26 @@ async def test_channel_sensor_no_streams(
     mock_is_stream_live,
 ) -> None:
     """Test channel sensor fallback when no streams exist."""
+    now = datetime.now(timezone.utc)
+    # Give it one stream first so it can get the friendly name
+    stream = make_stream(channel="Test Channel")
+    # Expire this stream quickly
+    stream.scheduled_start = now - timedelta(hours=24)
+
     with patch(
         "custom_components.youtube_live.coordinator.get_upcoming_streams",
-        return_value=[],
+        side_effect=[[stream], []],
     ):
         mock_config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        # Trigger second update which returns no streams
+        from custom_components.youtube_live.const import DOMAIN
+        from custom_components.youtube_live import YouTubeLiveSharedData
+        shared: YouTubeLiveSharedData = hass.data[DOMAIN]
+        coordinator = shared.coordinators[mock_config_entry.entry_id]
+        await coordinator.async_refresh()
         await hass.async_block_till_done()
 
     sensor_states = [
@@ -144,7 +158,7 @@ async def test_channel_sensor_no_streams(
     state = sensor_states[0]
 
     # Friendly name falls back to channel + Live
-    assert state.attributes["friendly_name"] == "@TestChannel Live"
+    assert state.attributes["friendly_name"] == "Test Channel Live"
 
     # No entity_picture or stream info when no streams
     assert state.attributes.get("entity_picture") is None
@@ -152,6 +166,6 @@ async def test_channel_sensor_no_streams(
     assert state.attributes["url"] is None
     assert state.attributes["stream_start"] is None
 
-    # Channel info still present
+    # Channel info still present (after the coordinator would have run)
     assert state.attributes["channel_handle"] == "@TestChannel"
-    assert state.attributes["channel_name"] == "@TestChannel"
+    assert state.attributes["channel_name"] == "Test Channel"

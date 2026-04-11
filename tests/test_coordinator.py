@@ -38,6 +38,9 @@ async def test_calendar_coordinator_fetches_streams(
     assert coordinator.data[1].video_id == "stream2"
     mock_get_upcoming_streams.assert_called_once_with(["@TestChannel"])
 
+    # Verify that the config entry title was updated to the friendly name
+    assert mock_config_entry.title == "Test Channel"
+
 
 async def test_calendar_coordinator_handles_error(
     hass: HomeAssistant,

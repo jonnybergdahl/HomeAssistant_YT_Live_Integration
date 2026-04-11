@@ -16,7 +16,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
+from .const import CONF_CHANNEL_HANDLE, DEFAULT_STREAM_DURATION_HOURS, DOMAIN
 from .coordinator import StreamStatusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,9 +35,9 @@ async def async_setup_entry(
     stream_status_coordinator = runtime_data.stream_status_coordinator
     calendar_coordinator = runtime_data.calendar_coordinator
 
-    # Use the friendly channel name from stream data, fall back to handle
+    # Use the friendly channel name from entry title, fall back to handle
     channel_name = entry.title
-    if calendar_coordinator.data:
+    if channel_name == entry.data[CONF_CHANNEL_HANDLE] and calendar_coordinator.data:
         channel_name = calendar_coordinator.data[0].channel
 
     async_add_entities(
@@ -139,7 +139,7 @@ class YouTubeLiveChannelSensor(
         """Return extra state attributes."""
         stream = self._next_stream()
         attrs: dict[str, Any] = {
-            "channel_handle": self._entry.title,
+            "channel_handle": self._entry.data[CONF_CHANNEL_HANDLE],
             "channel_name": self._channel_name,
             "stream_id": stream.video_id if stream else None,
             "url": stream.url if stream else None,

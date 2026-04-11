@@ -74,6 +74,20 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
             self.channel_handle,
             [f"{s.video_id} ({s.title})" for s in streams],
         )
+
+        if streams:
+            # Update the config entry title to the friendly channel name
+            friendly_name = streams[0].channel
+            if friendly_name and self.config_entry.title != friendly_name:
+                _LOGGER.debug(
+                    "Updating config entry title for %s to %s",
+                    self.channel_handle,
+                    friendly_name,
+                )
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, title=friendly_name
+                )
+
         return streams
 
 
