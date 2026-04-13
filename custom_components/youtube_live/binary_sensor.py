@@ -15,6 +15,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import CONF_CHANNEL_HANDLE, DEFAULT_STREAM_DURATION_HOURS, DOMAIN
 from .coordinator import StreamStatusCoordinator
@@ -51,6 +52,7 @@ class YouTubeLiveChannelSensor(
     """Binary sensor indicating whether a YouTube channel is currently live."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -68,11 +70,9 @@ class YouTubeLiveChannelSensor(
             name=channel_name,
             entry_type=DeviceEntryType.SERVICE,
         )
-
-    @property
-    def suggested_object_id(self) -> str:
-        """Return stable object ID for entity ID generation."""
-        return f"youtube_live {self._channel_name}"
+        # Pre-slugified object id so HA doesn't combine it with the device
+        # name. Results in entity_id: binary_sensor.youtube_live_<channel>.
+        self._attr_suggested_object_id = f"youtube_live_{slugify(channel_name)}"
 
     def _next_stream(self):
         """Return the next upcoming or currently live stream."""
