@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ACTIVE_WINDOW_MINUTES,
-    CONF_CHANNEL_HANDLE,
+    CONF_CHANNEL_HANDLES,
     DEFAULT_CALENDAR_INTERVAL,
     DEFAULT_SENSOR_INTERVAL,
     DOMAIN,
@@ -38,7 +38,7 @@ class StreamStatus:
 
 
 class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
-    """Coordinator that fetches upcoming streams hourly."""
+    """Coordinator that fetches upcoming streams hourly for a channel group."""
 
     config_entry: ConfigEntry
 
@@ -47,67 +47,122 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_calendar",
+            name=f"{DOMAIN}_calendar_{config_entry.entry_id}",
             config_entry=config_entry,
             update_interval=DEFAULT_CALENDAR_INTERVAL,
         )
-        self.channel_handle: str = config_entry.data[CONF_CHANNEL_HANDLE]
-        self.channel_thumbnail_url: str | None = None
+        self.channel_handles: list[str] = list(
+            config_entry.data.get(CONF_CHANNEL_HANDLES, [])
+        )
+        # handle (lowercased, with @) -> avatar URL; used as entity_picture
+        # fallback for per-channel binary sensors that don't have a current
+        # or upcoming stream.
+        self.channel_thumbnail_urls: dict[str, str] = {}
+        # handle (lowercased, with @) -> display name
+        self.channel_names: dict[str, str] = {}
+
+    @staticmethod
+    def _hkey(handle: str) -> str:
+        """Canonical key for matching handles."""
+        h = handle.strip()
+        if not h.startswith("@"):
+            h = f"@{h}"
+        return h.lower()
 
     async def _async_update_data(self) -> list[UpcomingStream]:
-        """Fetch upcoming streams from YouTube."""
+        """Fetch upcoming streams from YouTube for every channel in the group."""
         _LOGGER.debug(
-            "Fetching upcoming streams for %s", self.channel_handle
+            "Fetching upcoming streams for group %s (%d channels)",
+            self.config_entry.title,
+            len(self.channel_handles),
         )
         try:
             streams: list[UpcomingStream] = await self.hass.async_add_executor_job(
-                get_upcoming_streams, [self.channel_handle]
+                get_upcoming_streams, self.channel_handles
             )
         except Exception as err:
             _LOGGER.error(
-                "Error fetching streams for %s: %s", self.channel_handle, err, exc_info=True
+                "Error fetching streams for group %s: %s",
+                self.config_entry.title,
+                err,
+                exc_info=True,
             )
             raise UpdateFailed(
-                f"Error fetching streams for {self.channel_handle}: {err}"
+                f"Error fetching streams for group {self.config_entry.title}: {err}"
             ) from err
+
         _LOGGER.debug(
-            "Found %d upcoming stream(s) for %s: %s",
+            "Group %s: found %d stream(s): %s",
+            self.config_entry.title,
             len(streams),
-            self.channel_handle,
             [f"{s.video_id} ({s.title})" for s in streams],
         )
 
-        friendly_name = None
-        if streams:
-            # Update the config entry title to the friendly channel name
-            friendly_name = streams[0].channel
-            if streams[0].channel_thumbnail_url:
-                self.channel_thumbnail_url = streams[0].channel_thumbnail_url
-        else:
-            # No streams found, try to get the channel info directly
+        # Populate channel thumbnails/names from the streams we already fetched.
+        seen_channel_ids: dict[str, str] = {}
+        for stream in streams:
+            if stream.channel_thumbnail_url and stream.channel_id:
+                seen_channel_ids[stream.channel_id] = stream.channel_thumbnail_url
+
+        # Map channel_id -> handle key from our configured list when we can,
+        # otherwise fall back to get_channel_info.
+        for handle in self.channel_handles:
+            key = self._hkey(handle)
+            if key in self.channel_thumbnail_urls and key in self.channel_names:
+                continue
+            matched = False
+            for stream in streams:
+                if stream.channel.lower() == handle.lstrip("@").lower() or (
+                    stream.channel_id
+                    and stream.channel_id == self.channel_names.get(key)
+                ):
+                    # We only have display name or id to match on; store what we have.
+                    if stream.channel_thumbnail_url:
+                        self.channel_thumbnail_urls[key] = stream.channel_thumbnail_url
+                    if stream.channel:
+                        self.channel_names[key] = stream.channel
+                    matched = True
+                    break
+            if matched:
+                continue
+            # No stream for this handle — fetch channel info directly.
             try:
                 info = await self.hass.async_add_executor_job(
-                    get_channel_info, self.channel_handle
+                    get_channel_info, handle
                 )
             except Exception as err:
-                _LOGGER.warning("Could not fetch channel info for %s: %s", self.channel_handle, err)
+                _LOGGER.debug(
+                    "Could not fetch channel info for %s: %s", handle, err
+                )
                 info = None
             if info is not None:
-                friendly_name = info.name
+                self.channel_names[key] = info.name
                 if info.thumbnail_url:
-                    self.channel_thumbnail_url = info.thumbnail_url
-
-        if friendly_name and self.config_entry.title != friendly_name:
-            _LOGGER.debug(
-                "Updating config entry title for %s to %s",
-                self.channel_handle,
-                friendly_name,
-            )
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, title=friendly_name
-            )
+                    self.channel_thumbnail_urls[key] = info.thumbnail_url
 
         return streams
+
+    def streams_for_handle(self, handle: str) -> list[UpcomingStream]:
+        """Return the streams that belong to a specific handle.
+
+        Streams returned by the scraper expose ``channel`` (display name) and
+        ``channel_id`` but not the handle; we match case-insensitively on the
+        display name stored in :attr:`channel_names`, falling back to
+        comparing the handle-without-@ to the channel display name.
+        """
+        if not self.data:
+            return []
+        key = self._hkey(handle)
+        display_name = self.channel_names.get(key)
+        bare = handle.lstrip("@").lower()
+        out: list[UpcomingStream] = []
+        for stream in self.data:
+            name = (stream.channel or "").lower()
+            if display_name and name == display_name.lower():
+                out.append(stream)
+            elif name == bare:
+                out.append(stream)
+        return out
 
 
 @dataclass
@@ -132,7 +187,7 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_stream_status",
+            name=f"{DOMAIN}_stream_status_{config_entry.entry_id}",
             config_entry=config_entry,
             update_interval=DEFAULT_SENSOR_INTERVAL,
         )
@@ -223,10 +278,10 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
 
             live = result.is_live
 
-            # Correct the scheduled_start when the player response
-            # provides the actual broadcast start time.  This fixes the
-            # calendar showing "now" instead of the original time after
-            # a Home Assistant restart while a stream is already live.
+            # Correct the scheduled_start when the player response provides
+            # the actual broadcast start time. This fixes the calendar showing
+            # "now" instead of the original time after a Home Assistant
+            # restart while a stream is already live.
             if result.actual_start is not None:
                 if stream.scheduled_start != result.actual_start:
                     _LOGGER.debug(

@@ -2,29 +2,52 @@
     "config": {
         "step": {
             "user": {
-                "title": "Voeg een YouTube-kanaal toe",
-                "description": "Voer de YouTube-handle van het kanaal in waarvan u de live streams wilt volgen.",
+                "title": "Add YouTube channel group",
+                "description": "Create a group of YouTube channels (e.g. 'Gaming', 'Technology') to monitor for live streams.",
                 "data": {
-                    "channel_handle": "Kanaal-handle"
+                    "group_name": "Group name",
+                    "channel_handles": "Channel handles"
                 },
                 "data_description": {
-                    "channel_handle": "De YouTube-handle van een kanaal, i.e. @home_assistant"
+                    "group_name": "A name for this group, used as the device name in Home Assistant.",
+                    "channel_handles": "Add one or more channel handles, e.g. @home_assistant"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Kan geen verbinding maken met YouTube. Probeer het later opnieuw.",
-            "channel_not_found": "Kanaal niet gevonden op YouTube. Controleer de handle en probeer het opnieuw (handles zijn hoofdlettergevoelig).",
-            "unknown": "Onbekende fout."
+            "cannot_connect": "Could not connect to YouTube. Please try again later.",
+            "channel_not_found": "One or more channels were not found on YouTube. Check the handles and try again (handles are case-sensitive).",
+            "no_channels": "Add at least one channel handle.",
+            "no_group_name": "Group name cannot be empty.",
+            "unknown": "Unexpected error"
         },
         "abort": {
-            "already_configured": "Dit YouTube-kanaal is al toegevoegd."
+            "already_configured": "A group with this name is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Edit channels in this group",
+                "description": "Add or remove channel handles in this group.",
+                "data": {
+                    "channel_handles": "Channel handles"
+                },
+                "data_description": {
+                    "channel_handles": "Add one or more channel handles, e.g. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Could not connect to YouTube. Please try again later.",
+            "channel_not_found": "One or more channels were not found on YouTube. Check the handles and try again (handles are case-sensitive).",
+            "no_channels": "Add at least one channel handle."
         }
     },
     "entity": {
         "binary_sensor": {
-            "channel_live": {
-                "name": "Live"
+            "group_any_live": {
+                "name": "Any channel live"
             }
         }
     }

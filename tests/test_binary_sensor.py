@@ -8,55 +8,67 @@ from unittest.mock import patch
 from homeassistant.core import HomeAssistant
 from yt_live_scraper import StreamLiveStatus
 
+from custom_components.youtube_live.const import CONF_CHANNEL_HANDLES, DOMAIN
+
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import make_stream
 
 
-async def test_channel_sensor_created(
+async def test_sensors_created_per_channel_plus_aggregate(
     hass: HomeAssistant,
-    mock_config_entry: MockConfigEntry,
     mock_get_upcoming_streams,
     mock_is_stream_live,
 ) -> None:
-    """Test that one binary sensor is created per channel."""
-    mock_config_entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    """Each handle gets one channel sensor; the group gets one aggregate sensor."""
+    entry = MockConfigEntry(version=2, 
+        domain=DOMAIN,
+        unique_id="gaming",
+        data={CONF_CHANNEL_HANDLES: ["@ChannelA", "@ChannelB"]},
+        title="Gaming",
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
     sensor_states = [
         s for s in hass.states.async_all() if s.domain == "binary_sensor"
     ]
-    assert len(sensor_states) == 1
+    # 2 per-channel + 1 aggregate
+    assert len(sensor_states) == 3
+
+    entity_ids = {s.entity_id for s in sensor_states}
+    assert "binary_sensor.youtube_live_channela" in entity_ids
+    assert "binary_sensor.youtube_live_channelb" in entity_ids
+    assert "binary_sensor.youtube_live_gaming_any_live" in entity_ids
 
 
-async def test_channel_sensor_off_by_default(
+async def test_group_sensor_off_when_nothing_live(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_get_upcoming_streams,
     mock_is_stream_live,
 ) -> None:
-    """Test that the channel sensor is off when no streams are live."""
+    """Group aggregate sensor is off when no stream is live."""
     mock_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    sensor_states = [
-        s for s in hass.states.async_all() if s.domain == "binary_sensor"
-    ]
-    assert len(sensor_states) == 1
-    assert sensor_states[0].state == "off"
+    state = hass.states.get("binary_sensor.youtube_live_test_group_any_live")
+    assert state is not None
+    assert state.state == "off"
 
 
 async def test_channel_sensor_on_when_live(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Test that the channel sensor is on when a stream is live."""
+    """The per-channel sensor and the group aggregate both go on when live."""
     now = datetime.now(timezone.utc)
     live_stream = make_stream(
         video_id="live1",
         title="Live Now",
+        channel="TestChannel",
         scheduled_start=now - timedelta(minutes=5),
         live=True,
     )
@@ -74,19 +86,21 @@ async def test_channel_sensor_on_when_live(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    sensor_states = [
-        s for s in hass.states.async_all() if s.domain == "binary_sensor"
-    ]
-    assert len(sensor_states) == 1
-    assert sensor_states[0].state == "on"
+    channel_state = hass.states.get("binary_sensor.youtube_live_testchannel")
+    aggregate_state = hass.states.get(
+        "binary_sensor.youtube_live_test_group_any_live"
+    )
+    assert channel_state is not None
+    assert aggregate_state is not None
+    assert channel_state.state == "on"
+    assert aggregate_state.state == "on"
 
-    # Friendly name should be the stream title
-    attrs = sensor_states[0].attributes
+    # Channel sensor friendly name and attributes
+    attrs = channel_state.attributes
     assert attrs["friendly_name"] == "Live Now"
     assert attrs["stream_id"] == "live1"
-    assert attrs["url"] == "https://www.youtube.com/watch?v=live1"
     assert attrs["channel_handle"] == "@TestChannel"
-    assert attrs["channel_name"] == "Test Channel"
+    assert attrs["group"] == "Test Group"
 
 
 async def test_channel_sensor_attributes(
@@ -95,78 +109,77 @@ async def test_channel_sensor_attributes(
     mock_get_upcoming_streams,
     mock_is_stream_live,
 ) -> None:
-    """Test channel sensor extra state attributes."""
+    """Channel sensor shows next upcoming stream and its thumbnail."""
     mock_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    sensor_states = [
-        s for s in hass.states.async_all() if s.domain == "binary_sensor"
-    ]
-    assert len(sensor_states) == 1
-    state = sensor_states[0]
-
-    # Friendly name should be the next stream's title
-    assert state.attributes["friendly_name"] == "Morning Stream"
-
-    # entity_picture should be the next stream's thumbnail
-    assert state.attributes.get("entity_picture") is not None
-    assert "stream1" in state.attributes["entity_picture"]
-
-    # Channel info
-    assert state.attributes["channel_handle"] == "@TestChannel"
-    assert state.attributes["channel_name"] == "Test Channel"
-
-    # Stream info
-    assert state.attributes["stream_id"] == "stream1"
-    assert state.attributes["url"] == "https://www.youtube.com/watch?v=stream1"
-    assert state.attributes["stream_start"] is not None
+    state = hass.states.get("binary_sensor.youtube_live_testchannel")
+    assert state is not None
+    attrs = state.attributes
+    assert attrs["friendly_name"] == "Morning Stream"
+    assert attrs.get("entity_picture") is not None
+    assert "stream1" in attrs["entity_picture"]
+    assert attrs["channel_handle"] == "@TestChannel"
+    assert attrs["stream_id"] == "stream1"
+    assert attrs["group"] == "Test Group"
 
 
-async def test_channel_sensor_no_streams(
+async def test_channel_sensor_entity_picture_falls_back_to_channel_avatar(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_is_stream_live,
 ) -> None:
-    """Test channel sensor fallback when no streams exist."""
-    now = datetime.now(timezone.utc)
-    # Give it one stream first so it can get the friendly name
-    stream = make_stream(channel="Test Channel")
-    # Expire this stream quickly
-    stream.scheduled_start = now - timedelta(hours=24)
-
+    """When no streams, entity_picture is the channel's avatar image."""
     with patch(
         "custom_components.youtube_live.coordinator.get_upcoming_streams",
-        side_effect=[[stream], []],
+        return_value=[],
     ):
         mock_config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        # Trigger second update which returns no streams
-        from custom_components.youtube_live.const import DOMAIN
-        from custom_components.youtube_live import YouTubeLiveSharedData
-        shared: YouTubeLiveSharedData = hass.data[DOMAIN]
-        coordinator = shared.coordinators[mock_config_entry.entry_id]
-        await coordinator.async_refresh()
-        await hass.async_block_till_done()
-
-    sensor_states = [
-        s for s in hass.states.async_all() if s.domain == "binary_sensor"
-    ]
-    assert len(sensor_states) == 1
-    state = sensor_states[0]
-
-    # Friendly name falls back to channel + Live
-    assert state.attributes["friendly_name"] == "Test Channel Live"
-
-    # entity_picture falls back to the channel image when no streams;
-    # stream-specific info is cleared
+    state = hass.states.get("binary_sensor.youtube_live_testchannel")
+    assert state is not None
     assert state.attributes.get("entity_picture") == "https://example.com/thumb.jpg"
     assert state.attributes["stream_id"] is None
-    assert state.attributes["url"] is None
-    assert state.attributes["stream_start"] is None
 
-    # Channel info still present (after the coordinator would have run)
-    assert state.attributes["channel_handle"] == "@TestChannel"
-    assert state.attributes["channel_name"] == "Test Channel"
+
+async def test_group_sensor_attributes_list_live_streams(
+    hass: HomeAssistant,
+) -> None:
+    """Group aggregate sensor lists the live stream IDs and count."""
+    now = datetime.now(timezone.utc)
+    live_stream = make_stream(
+        video_id="live1",
+        title="Live A",
+        channel="ChannelA",
+        scheduled_start=now - timedelta(minutes=2),
+        live=True,
+    )
+    entry = MockConfigEntry(version=2, 
+        domain=DOMAIN,
+        unique_id="gaming",
+        data={CONF_CHANNEL_HANDLES: ["@ChannelA", "@ChannelB"]},
+        title="Gaming",
+    )
+    with (
+        patch(
+            "custom_components.youtube_live.coordinator.get_upcoming_streams",
+            return_value=[live_stream],
+        ),
+        patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ),
+    ):
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.youtube_live_gaming_any_live")
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["live_count"] == 1
+    assert state.attributes["live_stream_ids"] == ["live1"]
+    assert state.attributes["channel_handles"] == ["@ChannelA", "@ChannelB"]

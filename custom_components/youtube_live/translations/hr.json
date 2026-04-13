@@ -2,29 +2,52 @@
     "config": {
         "step": {
             "user": {
-                "title": "Dodavanje YouTube kanala",
-                "description": "Unesite korisničko ime YouTube kanala (s oznakom @) koji želite pratiti za prijenose uživo.",
+                "title": "Add YouTube channel group",
+                "description": "Create a group of YouTube channels (e.g. 'Gaming', 'Technology') to monitor for live streams.",
                 "data": {
-                    "channel_handle": "Korisničko ime kanala (@...)"
+                    "group_name": "Group name",
+                    "channel_handles": "Channel handles"
                 },
                 "data_description": {
-                    "channel_handle": "Korisničko ime YouTube kanala, npr. @home_assistant"
+                    "group_name": "A name for this group, used as the device name in Home Assistant.",
+                    "channel_handles": "Add one or more channel handles, e.g. @home_assistant"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Povezivanje s YouTubeom nije uspjelo. Pokušajte ponovno kasnije.",
-            "channel_not_found": "Kanal nije pronađen na YouTubeu. Provjerite korisničko ime i pokušajte ponovno (korisničko ime razlikuje velika i mala slova).",
-            "unknown": "Neočekivana pogreška"
+            "cannot_connect": "Could not connect to YouTube. Please try again later.",
+            "channel_not_found": "One or more channels were not found on YouTube. Check the handles and try again (handles are case-sensitive).",
+            "no_channels": "Add at least one channel handle.",
+            "no_group_name": "Group name cannot be empty.",
+            "unknown": "Unexpected error"
         },
         "abort": {
-            "already_configured": "Ovaj kanal je već dodan."
+            "already_configured": "A group with this name is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Edit channels in this group",
+                "description": "Add or remove channel handles in this group.",
+                "data": {
+                    "channel_handles": "Channel handles"
+                },
+                "data_description": {
+                    "channel_handles": "Add one or more channel handles, e.g. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Could not connect to YouTube. Please try again later.",
+            "channel_not_found": "One or more channels were not found on YouTube. Check the handles and try again (handles are case-sensitive).",
+            "no_channels": "Add at least one channel handle."
         }
     },
     "entity": {
         "binary_sensor": {
-            "channel_live": {
-                "name": "Uživo"
+            "group_any_live": {
+                "name": "Any channel live"
             }
         }
     }

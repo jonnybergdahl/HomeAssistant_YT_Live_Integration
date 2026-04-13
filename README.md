@@ -1,12 +1,15 @@
 # YouTube Live for Home Assistant
 
-A Home Assistant custom integration that monitors YouTube channels for upcoming live streams. It creates a shared calendar with scheduled streams and a binary sensor per channel indicating whether the channel is currently live.
+A Home Assistant custom integration that monitors YouTube channels for upcoming live streams. Channels are organised into **groups** (e.g. "Gaming", "Technology"): each group becomes a device in Home Assistant with a calendar of its upcoming streams, a binary sensor for every channel in the group, and an aggregate "any channel live" binary sensor.
 
 ## Features
 
-- **Shared calendar** showing upcoming live streams from all monitored YouTube channels
-- **Per-channel binary sensor** that turns on when the channel goes live
-- Automatic polling: calendar updates hourly, live status checks every minute within a 15-minute window around the scheduled start time
+- **Channel groups** — organise the channels you monitor into named groups (one config entry per group)
+- **Per-group calendar** listing upcoming live streams for that group's channels
+- **Per-channel binary sensor** that turns on when that specific channel goes live
+- **Aggregate group sensor** that turns on when *any* channel in the group is live
+- Edit the channels in a group at any time via the integration's options
+- Automatic polling: calendars update hourly; live status checks run every minute within a 15-minute window around the scheduled start time
 - No API key required
 
 ## Installation
@@ -34,59 +37,74 @@ You can also do the above manually:
 
 ## Setup
 
-Click the button to add a YouTube Live channel to Home Assistant.
+Click the button to add a YouTube Live channel group to Home Assistant.
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=youtube_live)
 
-Enter the handle of the Youtube channel and click _Submit_.
-
-![Add channel](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/add.png)
-
-Optionally select an area and click _Skip and finish_.
-
-![Add area](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/area.png)
+1. Pick a **group name** (e.g. `Gaming`, `Technology`). This will be the device name in Home Assistant.
+2. Add one or more **channel handles** (e.g. `@home_assistant`) using the list control — click **Add** to enter each handle.
+3. Click **Submit**.
 
 You can also set it up manually:
 
 1. Go to **Settings** > **Devices & services** > **Add integration**
 2. Search for **YouTube Live**
-3. Enter the channel handle of the YouTube channel you want to monitor (e.g. `@home_assistant`)
+3. Enter a group name and the channel handles you want to include
 4. Click **Submit**
 
-To monitor multiple channels, repeat the setup for each channel.
+To add or remove channels later, open the integration's **Configure** action and edit the list. Changes take effect immediately.
+
+Create additional groups the same way — each group is independent and gets its own device, calendar, and sensors.
 
 ## Entities
 
+Every group produces one Home Assistant device containing:
+
 ### Calendar
 
-A single **YouTube Live Streams** calendar entity is created that aggregates upcoming live streams from all monitored channels. The calendar is updated once per hour.
+One **`calendar.youtube_live_<group>`** entity listing upcoming live streams for that group's channels. Updated once per hour.
 
-![Calendar](https://raw.githubusercontent.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/main/images/calendar.png)
+### Per-channel binary sensors
 
-### Binary sensor
+One **`binary_sensor.youtube_live_<handle>`** per channel in the group. The sensor turns **on** when any stream on that channel is currently live, **off** otherwise.
 
-Each channel gets a binary sensor (e.g. `binary_sensor.home_assistant_live`). The sensor turns **on** when any stream on the channel is live and **off** otherwise.
-
-The friendly name dynamically shows the title of the next upcoming or current stream. When no streams are scheduled it falls back to **\<channel\> Live**. The entity picture shows the stream thumbnail.
+The friendly name dynamically shows the title of the channel's next upcoming or current stream. When no streams are scheduled it falls back to **\<channel\> Live**. The entity picture shows the stream thumbnail when a stream is live or upcoming, and the channel's avatar otherwise.
 
 Live status polling starts 15 minutes before the scheduled start time and runs every minute. Polling stops when the stream ends, or 15 minutes after the scheduled start time if the stream never started.
 
-Each binary sensor includes extra state attributes:
+Each per-channel sensor includes extra state attributes:
 
 | Attribute | Description |
 |---|---|
 | `channel_handle` | Channel handle (e.g. `@home_assistant`) |
 | `channel_name` | Channel display name (e.g. `Home Assistant`) |
+| `group` | Name of the group this channel belongs to |
+| `stream_id` | Video ID of the next upcoming or current stream |
 | `url` | URL of the next upcoming or current stream |
 | `stream_start` | Scheduled start time (ISO 8601) |
 
-# Usage
+### Group aggregate sensor
 
-To get a single sensor that tells if any Youtube channel is live, create a binary Template sensor
+One **`binary_sensor.youtube_live_<group>_any_live`** per group. Turns **on** whenever any channel in the group is currently live. Handy for automations like "notify me when anything in my Gaming group starts streaming".
+
+Attributes:
+
+| Attribute | Description |
+|---|---|
+| `group` | Group name |
+| `channel_handles` | List of channel handles in the group |
+| `live_stream_ids` | Video IDs of streams currently live |
+| `live_count` | Number of streams currently live |
+
+## Usage
+
+To get a single sensor that tells if *any* channel across *all* groups is live, create a binary Template sensor:
 
 Show as: Running<br/>
 State:
 ```yaml
-{{ integration_entities('youtube_live') 
-   | select('is_state', 'on') 
-   | list | count > 0 }}```
+{{ integration_entities('youtube_live')
+   | select('search', '_any_live$')
+   | select('is_state', 'on')
+   | list | count > 0 }}
+```

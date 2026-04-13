@@ -7,10 +7,11 @@ from unittest.mock import patch
 
 import pytest
 from yt_live_scraper import StreamLiveStatus, UpcomingStream
+from yt_live_scraper.scraper import ChannelInfo
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.youtube_live.const import CONF_CHANNEL_HANDLE, DOMAIN
+from custom_components.youtube_live.const import CONF_CHANNEL_HANDLES, DOMAIN
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -23,12 +24,12 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 @pytest.fixture
 def mock_config_entry() -> MockConfigEntry:
-    """Create a mock config entry."""
-    return MockConfigEntry(
+    """Create a mock config entry for a group with one channel."""
+    return MockConfigEntry(version=2, 
         domain=DOMAIN,
-        unique_id="@testchannel",
-        data={CONF_CHANNEL_HANDLE: "@TestChannel"},
-        title="@TestChannel",
+        unique_id="test_group",
+        data={CONF_CHANNEL_HANDLES: ["@TestChannel"]},
+        title="Test Group",
     )
 
 
@@ -57,17 +58,19 @@ def make_stream(
 
 @pytest.fixture
 def mock_streams():
-    """Return a list of mock streams."""
+    """Return a list of mock streams (channel name matches @TestChannel)."""
     now = datetime.now(timezone.utc)
     return [
         make_stream(
             video_id="stream1",
             title="Morning Stream",
+            channel="TestChannel",
             scheduled_start=now + timedelta(hours=2),
         ),
         make_stream(
             video_id="stream2",
             title="Evening Stream",
+            channel="TestChannel",
             scheduled_start=now + timedelta(hours=6),
         ),
     ]
@@ -93,11 +96,22 @@ def mock_is_stream_live():
         yield mock_fn
 
 
-@pytest.fixture
-def mock_get_channel():
-    """Mock get_channel."""
-    with patch(
-        "custom_components.youtube_live.config_flow.get_channel",
-        return_value="Test Channel",
-    ) as mock_fn:
+@pytest.fixture(autouse=True)
+def mock_get_channel_info():
+    """Mock get_channel_info everywhere the coordinator and config flow use it."""
+    info = ChannelInfo(
+        name="Test Channel",
+        channel_id="UC_mock_channel_id",
+        thumbnail_url="https://example.com/thumb.jpg",
+    )
+    with (
+        patch(
+            "custom_components.youtube_live.coordinator.get_channel_info",
+            return_value=info,
+        ),
+        patch(
+            "custom_components.youtube_live.config_flow.get_channel_info",
+            return_value=info,
+        ) as mock_fn,
+    ):
         yield mock_fn

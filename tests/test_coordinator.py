@@ -5,14 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import pytest
 from homeassistant.core import HomeAssistant
 
 from yt_live_scraper import StreamLiveStatus
 
 from custom_components.youtube_live.coordinator import (
     CalendarCoordinator,
-    StreamStatus,
     StreamStatusCoordinator,
 )
 
@@ -25,16 +23,11 @@ async def test_calendar_coordinator_fetches_streams(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_get_upcoming_streams,
-    mock_streams,
 ) -> None:
-    """Test that the calendar coordinator fetches streams."""
-    with patch(
-        "custom_components.youtube_live.coordinator.get_channel",
-        return_value="Test Channel",
-    ):
-        mock_config_entry.add_to_hass(hass)
-        coordinator = CalendarCoordinator(hass, mock_config_entry)
-        await coordinator.async_refresh()
+    """Test that the calendar coordinator fetches streams for every channel."""
+    mock_config_entry.add_to_hass(hass)
+    coordinator = CalendarCoordinator(hass, mock_config_entry)
+    await coordinator.async_refresh()
 
     assert coordinator.data is not None
     assert len(coordinator.data) == 2
@@ -42,32 +35,28 @@ async def test_calendar_coordinator_fetches_streams(
     assert coordinator.data[1].video_id == "stream2"
     mock_get_upcoming_streams.assert_called_once_with(["@TestChannel"])
 
-    # Verify that the config entry title was updated to the friendly name
-    assert mock_config_entry.title == "Test Channel"
+    # Group title is user-picked and must not be changed
+    assert mock_config_entry.title == "Test Group"
 
 
-async def test_calendar_coordinator_no_streams_updates_title(
+async def test_calendar_coordinator_populates_channel_thumbnail(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Test that the calendar coordinator updates title even with no streams."""
-    with (
-        patch(
-            "custom_components.youtube_live.coordinator.get_upcoming_streams",
-            return_value=[],
-        ),
-        patch(
-            "custom_components.youtube_live.coordinator.get_channel",
-            return_value="Friendly Name",
-        ) as mock_get_channel,
+    """Channel thumbnail/avatar is fetched when no streams are present."""
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[],
     ):
         mock_config_entry.add_to_hass(hass)
         coordinator = CalendarCoordinator(hass, mock_config_entry)
         await coordinator.async_refresh()
 
-        assert len(coordinator.data) == 0
-        assert mock_config_entry.title == "Friendly Name"
-        mock_get_channel.assert_called_once_with("@TestChannel")
+    # get_channel_info is mocked in conftest to return thumbnail_url
+    assert (
+        coordinator.channel_thumbnail_urls.get("@testchannel")
+        == "https://example.com/thumb.jpg"
+    )
 
 
 async def test_calendar_coordinator_handles_error(
@@ -86,6 +75,26 @@ async def test_calendar_coordinator_handles_error(
         assert coordinator.last_update_success is False
 
 
+async def test_calendar_coordinator_passes_all_handles(
+    hass: HomeAssistant,
+) -> None:
+    """A group with multiple handles passes them all to the scraper."""
+    entry = MockConfigEntry(version=2, 
+        domain="youtube_live",
+        unique_id="gaming",
+        data={"channel_handles": ["@A", "@B", "@C"]},
+        title="Gaming",
+    )
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[],
+    ) as mock_fn:
+        coordinator = CalendarCoordinator(hass, entry)
+        await coordinator.async_refresh()
+        mock_fn.assert_called_once_with(["@A", "@B", "@C"])
+
+
 async def test_stream_status_no_active_streams(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -102,7 +111,6 @@ async def test_stream_status_no_active_streams(
     )
     await stream_coordinator.async_refresh()
 
-    # No streams in active window (they're 2h and 6h from now)
     mock_is_stream_live.assert_not_called()
     assert stream_coordinator.data is not None
     assert len(stream_coordinator.data.statuses) == 0
@@ -118,7 +126,7 @@ async def test_stream_status_active_window(
     active_stream = make_stream(
         video_id="active1",
         title="Starting Soon",
-        scheduled_start=now + timedelta(minutes=10),  # 10 min from now = in window
+        scheduled_start=now + timedelta(minutes=10),
     )
     with patch(
         "custom_components.youtube_live.coordinator.get_upcoming_streams",
@@ -190,7 +198,6 @@ async def test_stream_status_detects_ended(
         calendar_coordinator = CalendarCoordinator(hass, mock_config_entry)
         await calendar_coordinator.async_refresh()
 
-    # First update: stream is live
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
         return_value=StreamLiveStatus(is_live=True),
@@ -202,7 +209,6 @@ async def test_stream_status_detects_ended(
 
     assert stream_coordinator.data.statuses["ended1"].was_live is True
 
-    # Second update: stream ended
     with patch(
         "custom_components.youtube_live.coordinator.is_stream_live",
         return_value=StreamLiveStatus(is_live=False),
@@ -221,8 +227,6 @@ async def test_stream_status_corrects_start_time(
 ) -> None:
     """Test that scheduled_start is corrected from the player response."""
     now = datetime.now(timezone.utc)
-    # Simulate a live stream whose scheduled_start was set to "now"
-    # (which happens after a HA restart for live streams without upcomingEventData)
     stream = make_stream(
         video_id="live_corrected",
         title="Already Live",
@@ -248,6 +252,5 @@ async def test_stream_status_corrects_start_time(
         )
         await stream_coordinator.async_refresh()
 
-    # The stream's scheduled_start should be corrected to the actual start time
     assert stream.scheduled_start == actual_start
     assert stream_coordinator.data.statuses["live_corrected"].is_live is True
