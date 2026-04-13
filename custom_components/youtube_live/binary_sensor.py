@@ -72,7 +72,7 @@ class YouTubeLiveChannelSensor(
     @property
     def suggested_object_id(self) -> str:
         """Return stable object ID for entity ID generation."""
-        return f"{self._channel_name} live"
+        return f"youtube_live {self._channel_name}"
 
     def _next_stream(self):
         """Return the next upcoming or currently live stream."""
@@ -117,11 +117,11 @@ class YouTubeLiveChannelSensor(
 
     @property
     def entity_picture(self) -> str | None:
-        """Return the thumbnail of the next scheduled stream."""
+        """Return the stream thumbnail when live/upcoming, else the channel image."""
         stream = self._next_stream()
         if stream is not None:
             return stream.thumbnail_url
-        return None
+        return self.coordinator.calendar_coordinator.channel_thumbnail_url
 
     @property
     def is_on(self) -> bool | None:

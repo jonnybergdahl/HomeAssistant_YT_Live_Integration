@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from yt_live_scraper import StreamLiveStatus, UpcomingStream, get_upcoming_streams, is_stream_live
-from yt_live_scraper.scraper import get_channel
+from yt_live_scraper.scraper import get_channel_info
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -52,6 +52,7 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
             update_interval=DEFAULT_CALENDAR_INTERVAL,
         )
         self.channel_handle: str = config_entry.data[CONF_CHANNEL_HANDLE]
+        self.channel_thumbnail_url: str | None = None
 
     async def _async_update_data(self) -> list[UpcomingStream]:
         """Fetch upcoming streams from YouTube."""
@@ -80,14 +81,21 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
         if streams:
             # Update the config entry title to the friendly channel name
             friendly_name = streams[0].channel
+            if streams[0].channel_thumbnail_url:
+                self.channel_thumbnail_url = streams[0].channel_thumbnail_url
         else:
-            # No streams found, try to get the channel name directly
+            # No streams found, try to get the channel info directly
             try:
-                friendly_name = await self.hass.async_add_executor_job(
-                    get_channel, self.channel_handle
+                info = await self.hass.async_add_executor_job(
+                    get_channel_info, self.channel_handle
                 )
             except Exception as err:
-                _LOGGER.warning("Could not fetch channel name for %s: %s", self.channel_handle, err)
+                _LOGGER.warning("Could not fetch channel info for %s: %s", self.channel_handle, err)
+                info = None
+            if info is not None:
+                friendly_name = info.name
+                if info.thumbnail_url:
+                    self.channel_thumbnail_url = info.thumbnail_url
 
         if friendly_name and self.config_entry.title != friendly_name:
             _LOGGER.debug(

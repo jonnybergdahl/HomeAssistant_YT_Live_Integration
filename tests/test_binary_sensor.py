@@ -160,8 +160,9 @@ async def test_channel_sensor_no_streams(
     # Friendly name falls back to channel + Live
     assert state.attributes["friendly_name"] == "Test Channel Live"
 
-    # No entity_picture or stream info when no streams
-    assert state.attributes.get("entity_picture") is None
+    # entity_picture falls back to the channel image when no streams;
+    # stream-specific info is cleared
+    assert state.attributes.get("entity_picture") == "https://example.com/thumb.jpg"
     assert state.attributes["stream_id"] is None
     assert state.attributes["url"] is None
     assert state.attributes["stream_start"] is None

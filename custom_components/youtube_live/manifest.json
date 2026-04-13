@@ -8,6 +8,6 @@
     "integration_type": "service",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/jonnybergdahl/HomeAssistant_YT_Live_Integration/issues",
-    "requirements": ["yt-live-scraper==1.3.0"],
-    "version": "1.0.0"
+    "requirements": ["yt-live-scraper==1.4.0"],
+    "version": "1.1.0"
 }
