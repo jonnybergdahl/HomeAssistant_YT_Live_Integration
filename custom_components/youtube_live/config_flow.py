@@ -24,8 +24,12 @@ from .const import CONF_CHANNEL_HANDLES, CONF_GROUP_NAME, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-_CHANNEL_LIST_SELECTOR = selector.TextSelector(
-    selector.TextSelectorConfig(multiple=True)
+_CHANNEL_LIST_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[],
+        custom_value=True,
+        multiple=True,
+    )
 )
 
 
