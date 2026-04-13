@@ -70,9 +70,12 @@ class YouTubeLiveChannelSensor(
             name=channel_name,
             entry_type=DeviceEntryType.SERVICE,
         )
-        # Pre-slugified object id so HA doesn't combine it with the device
-        # name. Results in entity_id: binary_sensor.youtube_live_<channel>.
-        self._attr_suggested_object_id = f"youtube_live_{slugify(channel_name)}"
+        # Force entity_id so it doesn't get derived from the dynamic `name`
+        # property (which returns the current stream title). Results in
+        # entity_id: binary_sensor.youtube_live_<channel>.
+        object_id = f"youtube_live_{slugify(channel_name)}"
+        self._attr_suggested_object_id = object_id
+        self.entity_id = f"binary_sensor.{object_id}"
 
     def _next_stream(self):
         """Return the next upcoming or currently live stream."""
