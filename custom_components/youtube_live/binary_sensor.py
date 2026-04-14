@@ -10,7 +10,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -83,6 +83,7 @@ class YouTubeLiveChannelSensor(
         object_id = f"youtube_live_{handle_slug}"
         self._attr_suggested_object_id = object_id
         self.entity_id = f"binary_sensor.{object_id}"
+        self._attr_name = f"{handle.lstrip('@')} Live"
 
     @property
     def _channel_name(self) -> str:
@@ -112,13 +113,15 @@ class YouTubeLiveChannelSensor(
                 return stream
         return None
 
-    @property
-    def name(self) -> str:
-        """Return the stream title, or fall back to the channel name."""
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update the friendly name when coordinator data changes."""
         stream = self._next_stream()
         if stream is not None:
-            return stream.title
-        return f"{self._channel_name} Live"
+            self._attr_name = stream.title
+        else:
+            self._attr_name = f"{self._channel_name} Live"
+        super()._handle_coordinator_update()
 
     @property
     def entity_picture(self) -> str | None:
