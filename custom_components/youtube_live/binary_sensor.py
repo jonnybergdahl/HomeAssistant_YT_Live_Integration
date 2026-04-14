@@ -61,7 +61,6 @@ class YouTubeLiveChannelSensor(
     """Binary sensor indicating whether a specific channel is currently live."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -71,6 +70,11 @@ class YouTubeLiveChannelSensor(
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
+        # Must be set as instance attr AFTER super().__init__() so the
+        # @cached_property Entity.has_entity_name picks it up and the
+        # entity registry stores False — preventing HA from prepending
+        # the device name to the friendly_name.
+        self._attr_has_entity_name = False
         self._entry = entry
         self._handle = handle
         handle_slug = slugify(handle.lstrip("@"))
@@ -161,7 +165,6 @@ class YouTubeLiveGroupSensor(
     """Binary sensor indicating whether *any* channel in the group is live."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_has_entity_name = False
     _attr_translation_key = "group_any_live"
 
     def __init__(
@@ -171,6 +174,7 @@ class YouTubeLiveGroupSensor(
     ) -> None:
         """Initialize the aggregate sensor."""
         super().__init__(coordinator)
+        self._attr_has_entity_name = False
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_any_live"
         self._attr_device_info = _group_device_info(entry)
