@@ -23,6 +23,7 @@ from .coordinator import StreamStatusCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from yt_live_scraper import UpcomingStream
     from . import YouTubeLiveConfigEntry
 
 
@@ -193,11 +194,20 @@ class YouTubeLiveGroupSensor(
     @property
     def is_on(self) -> bool | None:
         """Return true if any stream in the group is currently live."""
-        if self.coordinator.data is None:
+        return self._first_live_stream is not None
+
+    @property
+    def _first_live_stream(self) -> UpcomingStream | None:
+        """Return the first live stream in the group."""
+        if self.coordinator.data is None or self.coordinator.calendar_coordinator.data is None:
             return None
-        return any(
-            status.is_live for status in self.coordinator.data.statuses.values()
-        )
+        
+        statuses = self.coordinator.data.statuses
+        for stream in self.coordinator.calendar_coordinator.data:
+            status = statuses.get(stream.video_id)
+            if status and status.is_live:
+                return stream
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -209,9 +219,32 @@ class YouTubeLiveGroupSensor(
                 for vid, status in self.coordinator.data.statuses.items()
                 if status.is_live
             ]
-        return {
+        
+        attrs = {
             "group": self._entry.title,
             "channel_handles": list(self._entry.data.get(CONF_CHANNEL_HANDLES, [])),
             "live_stream_ids": live_ids,
             "live_count": len(live_ids),
         }
+
+        if stream := self._first_live_stream:
+            # Find the handle for this stream
+            handle = None
+            calendar = self.coordinator.calendar_coordinator
+            for h in self._entry.data.get(CONF_CHANNEL_HANDLES, []):
+                key = calendar._hkey(h)
+                display_name = calendar.channel_names.get(key)
+                if (display_name and stream.channel.lower() == display_name.lower()) or (
+                    stream.channel.lower() == h.lstrip("@").lower()
+                ):
+                    handle = h
+                    break
+            
+            attrs.update({
+                "live_channel_handle": handle,
+                "live_channel_name": stream.channel,
+                "live_url": stream.url,
+                "live_entity_picture": stream.thumbnail_url,
+            })
+
+        return attrs
