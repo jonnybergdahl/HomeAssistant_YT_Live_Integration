@@ -71,6 +71,19 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
 
     async def _async_update_data(self) -> list[UpcomingStream]:
         """Fetch upcoming streams from YouTube for every channel in the group."""
+        # Update our list of handles from the config entry
+        self.channel_handles = list(
+            self.config_entry.data.get(CONF_CHANNEL_HANDLES, [])
+        )
+        # Cleanup stale metadata for channels that were removed
+        current_keys = {self._hkey(h) for h in self.channel_handles}
+        self.channel_thumbnail_urls = {
+            k: v for k, v in self.channel_thumbnail_urls.items() if k in current_keys
+        }
+        self.channel_names = {
+            k: v for k, v in self.channel_names.items() if k in current_keys
+        }
+
         _LOGGER.debug(
             "Fetching upcoming streams for group %s (%d channels)",
             self.config_entry.title,

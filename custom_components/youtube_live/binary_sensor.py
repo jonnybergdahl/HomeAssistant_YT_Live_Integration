@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -38,6 +39,27 @@ async def async_setup_entry(
 
     handles: list[str] = list(entry.data.get(CONF_CHANNEL_HANDLES, []))
 
+    # Remove entities that are no longer in the config
+    ent_reg = er.async_get(hass)
+    existing_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+    handle_slugs = {slugify(h.lstrip("@")) for h in handles}
+    for entity_entry in existing_entries:
+        if entity_entry.domain != "binary_sensor":
+            continue
+        # The unique_id format is f"{entry.entry_id}_{handle_slug}_live"
+        # and f"{entry.entry_id}_any_live"
+        uid = entity_entry.unique_id
+        if not uid.startswith(f"{entry.entry_id}_"):
+            continue
+        suffix = uid[len(entry.entry_id) + 1:]
+        if suffix == "any_live":
+            continue
+        if suffix.endswith("_live"):
+            slug = suffix[:-5]
+            if slug not in handle_slugs:
+                ent_reg.async_remove(entity_entry.entity_id)
+
+    # Add new entities
     entities: list[BinarySensorEntity] = [
         YouTubeLiveChannelSensor(stream_status_coordinator, entry, handle)
         for handle in handles
