@@ -250,6 +250,7 @@ class YouTubeLiveGroupSensor(
             attrs.update({
                 "live_channel_handle": handle,
                 "live_channel_name": stream.channel,
+                "live_stream_title": stream.title,
                 "live_url": stream.url,
             })
 
