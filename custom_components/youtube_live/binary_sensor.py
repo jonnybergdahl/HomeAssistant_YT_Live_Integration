@@ -109,6 +109,11 @@ class YouTubeLiveChannelSensor(
 
         now = datetime.now().astimezone()
         for stream in streams:
+            # Skip streams that have ended according to the status coordinator
+            status = live_statuses.get(stream.video_id)
+            if status and status.ended:
+                continue
+
             end = stream.scheduled_start + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS)
             if end > now:
                 return stream
@@ -117,19 +122,23 @@ class YouTubeLiveChannelSensor(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the friendly name when coordinator data changes."""
-        stream = self._next_stream()
-        if stream is not None:
-            self._attr_name = stream.title
+        if self.is_on:
+            stream = self._next_stream()
+            if stream is not None:
+                self._attr_name = stream.title
+            else:
+                self._attr_name = self._channel_name
         else:
-            self._attr_name = f"{self._channel_name} Live"
+            self._attr_name = self._channel_name
         super()._handle_coordinator_update()
 
     @property
     def entity_picture(self) -> str | None:
-        """Return the stream thumbnail when live/upcoming, else the channel avatar."""
-        stream = self._next_stream()
-        if stream is not None:
-            return stream.thumbnail_url
+        """Return the stream thumbnail when live, else the channel avatar."""
+        if self.is_on:
+            stream = self._next_stream()
+            if stream is not None:
+                return stream.thumbnail_url
         key = self.coordinator.calendar_coordinator._hkey(self._handle)
         return self.coordinator.calendar_coordinator.channel_thumbnail_urls.get(key)
 
@@ -152,7 +161,8 @@ class YouTubeLiveChannelSensor(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
-        stream = self._next_stream()
+        is_live = self.is_on
+        stream = self._next_stream() if is_live else None
         return {
             "channel_handle": self._handle,
             "channel_name": self._channel_name,

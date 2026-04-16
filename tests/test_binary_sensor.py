@@ -117,11 +117,10 @@ async def test_channel_sensor_attributes(
     state = hass.states.get("binary_sensor.youtube_live_testchannel")
     assert state is not None
     attrs = state.attributes
-    assert attrs["friendly_name"] == "Morning Stream"
-    assert attrs.get("entity_picture") is not None
-    assert "stream1" in attrs["entity_picture"]
+    assert attrs["friendly_name"] == "TestChannel"
+    assert state.attributes.get("entity_picture") == "https://example.com/thumb.jpg"
     assert attrs["channel_handle"] == "@TestChannel"
-    assert attrs["stream_id"] == "stream1"
+    assert attrs["stream_id"] is None
     assert attrs["group"] == "Test Group"
 
 
