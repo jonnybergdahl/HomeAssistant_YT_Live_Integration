@@ -210,6 +210,13 @@ class YouTubeLiveGroupSensor(
         return None
 
     @property
+    def entity_picture(self) -> str | None:
+        """Return the thumbnail of the first live stream."""
+        if stream := self._first_live_stream:
+            return stream.thumbnail_url
+        return None
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes listing live channels."""
         live_ids: list[str] = []
@@ -244,7 +251,6 @@ class YouTubeLiveGroupSensor(
                 "live_channel_handle": handle,
                 "live_channel_name": stream.channel,
                 "live_url": stream.url,
-                "live_entity_picture": stream.thumbnail_url,
             })
 
         return attrs
