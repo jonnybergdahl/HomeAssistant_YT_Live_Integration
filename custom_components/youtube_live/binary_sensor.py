@@ -144,14 +144,7 @@ class YouTubeLiveChannelSensor(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update the friendly name when coordinator data changes."""
-        if self.is_on:
-            stream = self._next_stream()
-            if stream is not None:
-                self._attr_name = stream.title
-            else:
-                self._attr_name = self._channel_name
-        else:
-            self._attr_name = self._channel_name
+        self._attr_name = self._channel_name
         super()._handle_coordinator_update()
 
     @property
@@ -190,6 +183,7 @@ class YouTubeLiveChannelSensor(
             "channel_name": self._channel_name,
             "group": self._entry.title,
             "stream_id": stream.video_id if stream else None,
+            "stream_title": stream.title if stream else None,
             "url": stream.url if stream else None,
             "stream_start": stream.scheduled_start.isoformat() if stream else None,
         }

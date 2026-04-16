@@ -97,7 +97,8 @@ async def test_channel_sensor_on_when_live(
 
     # Channel sensor friendly name and attributes
     attrs = channel_state.attributes
-    assert attrs["friendly_name"] == "Live Now"
+    assert attrs["friendly_name"] == "TestChannel"
+    assert attrs["stream_title"] == "Live Now"
     assert attrs["stream_id"] == "live1"
     assert attrs["channel_handle"] == "@TestChannel"
     assert attrs["group"] == "Test Group"
