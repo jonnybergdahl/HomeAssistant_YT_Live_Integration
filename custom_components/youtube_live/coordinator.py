@@ -236,9 +236,10 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
             [s.video_id for s in streams],
         )
 
-        # Clean up states for streams no longer in calendar data
+        # Clean up states for streams no longer in calendar data,
+        # unless they are currently live.
         known_ids = {s.video_id for s in streams}
-        removed = set(self._stream_states) - known_ids
+        removed = set(self._stream_states) - (known_ids | {vid for vid, state in self._stream_states.items() if state.is_live})
         if removed:
             _LOGGER.debug(
                 "Removing stale stream states: %s", removed
@@ -246,36 +247,46 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         self._stream_states = {
             vid: state
             for vid, state in self._stream_states.items()
-            if vid in known_ids
+            if vid in known_ids or state.is_live
         }
 
+        # Add new streams from calendar to states
         for stream in streams:
-            video_id = stream.video_id
-            state = self._stream_states.get(video_id)
-            if state and state.is_live:
+            if stream.video_id not in self._stream_states:
+                if self._is_in_active_window(stream):
+                    _LOGGER.debug(
+                        "Stream %s (%s) entered active window, starting polling",
+                        stream.video_id,
+                        stream.title,
+                    )
+                    self._stream_states[stream.video_id] = StreamStatus()
+                elif stream.live:
+                     _LOGGER.debug("Stream %s is marked as live by scraper, starting polling", stream.video_id)
+                     self._stream_states[stream.video_id] = StreamStatus()
+
+        # Poll all streams currently in states (includes those from calendar
+        # and those that were already live but dropped from calendar).
+        for video_id, state in list(self._stream_states.items()):
+            # Find the stream object from calendar data if available
+            stream = next((s for s in streams if s.video_id == video_id), None)
+
+            if state.is_live:
                 # Keep polling if currently live
                 _LOGGER.debug("Stream %s is live, continuing to poll", video_id)
                 pass
-            elif stream.live:
+            elif stream and stream.live:
                 # If the scraper already says it's live, we should poll it
                 _LOGGER.debug("Stream %s is marked as live by scraper, starting polling", video_id)
-                if state:
-                    # If it was marked as ended, reset it so we can poll again
-                    state.ended = False
+                # If it was marked as ended, reset it so we can poll again
+                state.ended = False
                 pass
-            elif not self._is_in_active_window(stream):
+            elif stream and not self._is_in_active_window(stream):
                 _LOGGER.debug("Stream %s is outside active window, skipping", video_id)
                 continue
-
-            if video_id not in self._stream_states:
-                _LOGGER.debug(
-                    "Stream %s (%s) entered active window, starting polling",
-                    video_id,
-                    stream.title,
-                )
-                self._stream_states[video_id] = StreamStatus()
-
-            state = self._stream_states[video_id]
+            elif not stream and not state.is_live:
+                # Should not really happen due to cleanup above, but for safety:
+                # if it's not in calendar and not live, we don't need to poll it.
+                continue
 
             if state.ended:
                 _LOGGER.debug("Stream %s has already ended, skipping poll", video_id)
@@ -298,7 +309,7 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
             # the actual broadcast start time. This fixes the calendar showing
             # "now" instead of the original time after a Home Assistant
             # restart while a stream is already live.
-            if result.actual_start is not None:
+            if stream and result.actual_start is not None:
                 if stream.scheduled_start != result.actual_start:
                     _LOGGER.debug(
                         "Correcting scheduled_start for %s from %s to %s",
@@ -317,9 +328,10 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
                 result.actual_start,
             )
 
+            title = stream.title if stream else video_id
             if live and not state.was_live:
                 _LOGGER.info(
-                    "Stream %s (%s) is now live", video_id, stream.title
+                    "Stream %s (%s) is now live", video_id, title
                 )
                 state.was_live = True
             elif live:
@@ -327,16 +339,16 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
             elif state.was_live:
                 # Stream was live but is no longer — it ended
                 _LOGGER.info(
-                    "Stream %s (%s) has ended", video_id, stream.title
+                    "Stream %s (%s) has ended", video_id, title
                 )
                 state.is_live = False
                 state.ended = True
-            elif now > stream.scheduled_start + timedelta(minutes=ACTIVE_WINDOW_MINUTES):
+            elif stream and now > stream.scheduled_start + timedelta(minutes=ACTIVE_WINDOW_MINUTES):
                 # Past the active window and never went live
                 _LOGGER.debug(
                     "Stream %s (%s) passed active window without going live",
                     video_id,
-                    stream.title,
+                    title,
                 )
                 state.ended = True
 
