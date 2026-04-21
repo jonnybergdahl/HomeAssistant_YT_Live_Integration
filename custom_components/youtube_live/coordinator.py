@@ -185,6 +185,14 @@ class StreamStatusData:
     statuses: dict[str, StreamStatus] = field(default_factory=dict)
 
 
+@dataclass
+class StreamMetadata:
+    """Store metadata for a stream being tracked."""
+
+    handle: str
+    stream: UpcomingStream
+
+
 class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
     """Coordinator that polls live status for streams in the active window."""
 
@@ -206,6 +214,20 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         )
         self.calendar_coordinator = calendar_coordinator
         self._stream_states: dict[str, StreamStatus] = {}
+        # video_id -> StreamMetadata
+        self.stream_metadata: dict[str, StreamMetadata] = {}
+
+    def _get_stream_handle(self, stream: UpcomingStream) -> str | None:
+        """Find the handle associated with a stream."""
+        calendar = self.calendar_coordinator
+        for handle in calendar.channel_handles:
+            key = calendar._hkey(handle)
+            display_name = calendar.channel_names.get(key)
+            bare = handle.lstrip("@").lower()
+            name = (stream.channel or "").lower()
+            if (display_name and name == display_name.lower()) or name == bare:
+                return handle
+        return None
 
     def _is_in_active_window(self, stream: UpcomingStream) -> bool:
         """Check if a stream is in the active polling window."""
@@ -249,6 +271,11 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
             for vid, state in self._stream_states.items()
             if vid in known_ids or state.is_live
         }
+        self.stream_metadata = {
+            vid: meta
+            for vid, meta in self.stream_metadata.items()
+            if vid in self._stream_states
+        }
 
         # Add new streams from calendar to states
         for stream in streams:
@@ -263,6 +290,11 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
                 elif stream.live:
                      _LOGGER.debug("Stream %s is marked as live by scraper, starting polling", stream.video_id)
                      self._stream_states[stream.video_id] = StreamStatus()
+            
+            # Update metadata if we have it
+            if stream.video_id in self._stream_states and stream.video_id not in self.stream_metadata:
+                if handle := self._get_stream_handle(stream):
+                    self.stream_metadata[stream.video_id] = StreamMetadata(handle, stream)
 
         # Poll all streams currently in states (includes those from calendar
         # and those that were already live but dropped from calendar).

@@ -116,18 +116,28 @@ class YouTubeLiveChannelSensor(
             key, self._handle.lstrip("@")
         )
 
-    def _next_stream(self):
+    def _next_stream(self) -> UpcomingStream | None:
         """Return this channel's live stream, or the next upcoming one."""
         calendar = self.coordinator.calendar_coordinator
         streams = calendar.streams_for_handle(self._handle)
-        if not streams:
-            return None
-
+        
         live_statuses = self.coordinator.data.statuses if self.coordinator.data else {}
+        
+        # 1. Look for a stream in the calendar that is currently live.
         for stream in streams:
             status = live_statuses.get(stream.video_id)
             if status and status.is_live:
                 return stream
+
+        # 2. Look for any stream being tracked that is live for this channel,
+        # even if it's no longer in the calendar data.
+        if self.coordinator.data:
+            for vid, status in live_statuses.items():
+                if status.is_live:
+                    if vid in self.coordinator.stream_metadata:
+                        metadata = self.coordinator.stream_metadata[vid]
+                        if metadata.handle == self._handle:
+                            return metadata.stream
 
         now = datetime.now().astimezone()
         for stream in streams:
@@ -162,16 +172,28 @@ class YouTubeLiveChannelSensor(
         """Return true if any of this channel's streams is currently live."""
         if self.coordinator.data is None:
             return None
+        
+        # Check streams currently in the calendar
         streams = self.coordinator.calendar_coordinator.streams_for_handle(self._handle)
         stream_ids = {s.video_id for s in streams}
-        if not stream_ids:
-            return False
         statuses = self.coordinator.data.statuses
-        return any(
-            status.is_live
-            for vid, status in statuses.items()
-            if vid in stream_ids
-        )
+        
+        for vid, status in statuses.items():
+            if status.is_live:
+                # If it's in the calendar for this handle, it's live.
+                if vid in stream_ids:
+                    return True
+                
+                # If it's NOT in the calendar, we need to check if it's
+                # one of ours. We can check the full list of streams
+                # currently in the StreamStatusCoordinator's internal states
+                # and see if any that are live match our handle.
+                if vid in self.coordinator.stream_metadata:
+                    metadata = self.coordinator.stream_metadata[vid]
+                    if metadata.handle == self._handle:
+                        return True
+        
+        return False
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -225,14 +247,23 @@ class YouTubeLiveGroupSensor(
     @property
     def _first_live_stream(self) -> UpcomingStream | None:
         """Return the first live stream in the group."""
-        if self.coordinator.data is None or self.coordinator.calendar_coordinator.data is None:
+        if self.coordinator.data is None:
             return None
         
         statuses = self.coordinator.data.statuses
-        for stream in self.coordinator.calendar_coordinator.data:
-            status = statuses.get(stream.video_id)
-            if status and status.is_live:
-                return stream
+        # 1. Check streams currently in the calendar
+        if self.coordinator.calendar_coordinator.data:
+            for stream in self.coordinator.calendar_coordinator.data:
+                status = statuses.get(stream.video_id)
+                if status and status.is_live:
+                    return stream
+        
+        # 2. Check streams in metadata (those that might have dropped from calendar)
+        for vid, status in statuses.items():
+            if status.is_live:
+                if vid in self.coordinator.stream_metadata:
+                    return self.coordinator.stream_metadata[vid].stream
+                    
         return None
 
     @property
