@@ -96,6 +96,24 @@ Attributes:
 | `live_stream_ids` | Video IDs of streams currently live |
 | `live_count` | Number of streams currently live |
 
+### Upcoming streams sensor (for ESPHome)
+
+One **`sensor.youtube_live_<group>_upcoming`** per group. The state is an integer count of upcoming streams (max 5). 
+
+This sensor is designed for easy consumption by ESPHome devices (e.g., using `text_sensor` with `attribute` mapping). It provides a flat list of the next 5 upcoming streams as attributes.
+
+Attributes:
+
+| Attribute | Description |
+|---|---|
+| `event_i_title` | Stream title (truncated to 80 chars) |
+| `event_i_start` | Scheduled start time (ISO 8601 UTC) |
+| `event_i_video_id` | YouTube video ID |
+| `event_i_channel` | Channel name |
+| `event_i_duration` | Expected duration in minutes |
+
+...where `i` is 0 to 4. Empty slots are represented as empty strings `""`.
+
 ## Usage
 
 To get a single sensor that tells if *any* channel across *all* groups is live, create a binary Template sensor:
