@@ -35,7 +35,6 @@ class YouTubeLiveUpcomingSensor(
 ):
     """Sensor showing upcoming streams in a flat format for ESPHome."""
 
-    _attr_has_entity_name = True
     _attr_translation_key = "upcoming_streams"
 
     def __init__(
@@ -45,6 +44,8 @@ class YouTubeLiveUpcomingSensor(
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        # Prevent HA from using device name in the entity name
+        self._attr_has_entity_name = False
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_upcoming"
         self._attr_device_info = DeviceInfo(
@@ -58,7 +59,7 @@ class YouTubeLiveUpcomingSensor(
     @property
     def name(self) -> str:
         """Return the name of the sensor."""
-        return "Upcoming"
+        return f"youtube_live_{slugify(self._entry.title)}_upcoming"
 
     @property
     def native_value(self) -> int:
