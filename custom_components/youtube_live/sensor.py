@@ -52,7 +52,7 @@ class YouTubeLiveUpcomingSensor(
             name=entry.title,
             entry_type=DeviceEntryType.SERVICE,
         )
-        object_id = f"youtube_upcoming_{slugify(entry.title)}"
+        object_id = f"youtube_live_{slugify(entry.title)}_upcoming"
         self.entity_id = f"sensor.{object_id}"
 
     @property

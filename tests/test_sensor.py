@@ -41,7 +41,7 @@ async def test_upcoming_sensor_attributes(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    state = hass.states.get("sensor.youtube_upcoming_test_group")
+    state = hass.states.get("sensor.youtube_live_test_group_upcoming")
     assert state is not None
     assert state.state == "2"
     
@@ -84,7 +84,7 @@ async def test_upcoming_sensor_no_streams(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    state = hass.states.get("sensor.youtube_upcoming_test_group")
+    state = hass.states.get("sensor.youtube_live_test_group_upcoming")
     assert state is not None
     assert state.state == "0"
     assert state.attributes["event_0_title"] == ""
