@@ -59,7 +59,7 @@ class YouTubeLiveUpcomingSensor(
     @property
     def name(self) -> str:
         """Return the name of the sensor."""
-        return f"youtube_live_{slugify(self._entry.title)}_upcoming"
+        return f"{self._entry.title} upcoming"
 
     @property
     def native_value(self) -> int:

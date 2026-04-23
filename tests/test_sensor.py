@@ -43,6 +43,7 @@ async def test_upcoming_sensor_attributes(
 
     state = hass.states.get("sensor.youtube_live_test_group_upcoming")
     assert state is not None
+    assert state.name == "Test Group upcoming"
     assert state.state == "2"
     
     attrs = state.attributes
