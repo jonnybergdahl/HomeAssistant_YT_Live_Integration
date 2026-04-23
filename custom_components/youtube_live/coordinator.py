@@ -259,17 +259,14 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         )
 
         # Clean up states for streams no longer in calendar data,
-        # unless they are currently live.
+        # unless they are currently live, or were live and haven't been confirmed ended yet,
+        # or were in the calendar in the previous update (to handle the transition to live).
         known_ids = {s.video_id for s in streams}
-        removed = set(self._stream_states) - (known_ids | {vid for vid, state in self._stream_states.items() if state.is_live})
-        if removed:
-            _LOGGER.debug(
-                "Removing stale stream states: %s", removed
-            )
         self._stream_states = {
             vid: state
             for vid, state in self._stream_states.items()
-            if vid in known_ids or state.is_live
+            if vid in known_ids or state.is_live or (state.was_live and not state.ended)
+            or (vid in self.data.statuses if self.data else False)
         }
         self.stream_metadata = {
             vid: meta
