@@ -60,6 +60,8 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
         self.channel_thumbnail_urls: dict[str, str] = {}
         # handle (lowercased, with @) -> display name
         self.channel_names: dict[str, str] = {}
+        # handle (lowercased, with @) -> channel ID
+        self.channel_ids: dict[str, str] = {}
 
     @staticmethod
     def _hkey(handle: str) -> str:
@@ -82,6 +84,9 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
         }
         self.channel_names = {
             k: v for k, v in self.channel_names.items() if k in current_keys
+        }
+        self.channel_ids = {
+            k: v for k, v in self.channel_ids.items() if k in current_keys
         }
 
         _LOGGER.debug(
@@ -127,13 +132,15 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
             for stream in streams:
                 if stream.channel.lower() == handle.lstrip("@").lower() or (
                     stream.channel_id
-                    and stream.channel_id == self.channel_names.get(key)
+                    and stream.channel_id == self.channel_ids.get(key)
                 ):
                     # We only have display name or id to match on; store what we have.
                     if stream.channel_thumbnail_url:
                         self.channel_thumbnail_urls[key] = stream.channel_thumbnail_url
                     if stream.channel:
                         self.channel_names[key] = stream.channel
+                    if stream.channel_id:
+                        self.channel_ids[key] = stream.channel_id
                     matched = True
                     break
             if matched:
@@ -150,6 +157,8 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
                 info = None
             if info is not None:
                 self.channel_names[key] = info.name
+                if info.channel_id:
+                    self.channel_ids[key] = info.channel_id
                 if info.thumbnail_url:
                     self.channel_thumbnail_urls[key] = info.thumbnail_url
 
@@ -159,17 +168,20 @@ class CalendarCoordinator(DataUpdateCoordinator[list[UpcomingStream]]):
         """Return the streams that belong to a specific handle.
 
         Streams returned by the scraper expose ``channel`` (display name) and
-        ``channel_id`` but not the handle; we match case-insensitively on the
-        display name stored in :attr:`channel_names`, falling back to
-        comparing the handle-without-@ to the channel display name.
+        ``channel_id`` but not the handle; we match on channel_id if available,
+        falling back to case-insensitive display name matching.
         """
         if not self.data:
             return []
         key = self._hkey(handle)
+        channel_id = self.channel_ids.get(key)
         display_name = self.channel_names.get(key)
         bare = handle.lstrip("@").lower()
         out: list[UpcomingStream] = []
         for stream in self.data:
+            if channel_id and stream.channel_id == channel_id:
+                out.append(stream)
+                continue
             name = (stream.channel or "").lower()
             if display_name and name == display_name.lower():
                 out.append(stream)
@@ -222,6 +234,9 @@ class StreamStatusCoordinator(DataUpdateCoordinator[StreamStatusData]):
         calendar = self.calendar_coordinator
         for handle in calendar.channel_handles:
             key = calendar._hkey(handle)
+            channel_id = calendar.channel_ids.get(key)
+            if channel_id and stream.channel_id == channel_id:
+                return handle
             display_name = calendar.channel_names.get(key)
             bare = handle.lstrip("@").lower()
             name = (stream.channel or "").lower()
