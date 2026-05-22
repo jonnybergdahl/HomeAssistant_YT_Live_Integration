@@ -14,7 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
-from .coordinator import CalendarCoordinator
+from .coordinator import YouTubeLiveCoordinator
 
 if TYPE_CHECKING:
     from . import YouTubeLiveConfigEntry
@@ -26,12 +26,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the upcoming streams sensor."""
-    runtime_data = entry.runtime_data
-    async_add_entities([YouTubeLiveUpcomingSensor(runtime_data.calendar_coordinator, entry)])
+    async_add_entities([YouTubeLiveUpcomingSensor(entry.runtime_data.coordinator, entry)])
 
 
 class YouTubeLiveUpcomingSensor(
-    CoordinatorEntity[CalendarCoordinator], SensorEntity
+    CoordinatorEntity[YouTubeLiveCoordinator], SensorEntity
 ):
     """Sensor showing upcoming streams in a flat format for ESPHome."""
 
@@ -39,7 +38,7 @@ class YouTubeLiveUpcomingSensor(
 
     def __init__(
         self,
-        coordinator: CalendarCoordinator,
+        coordinator: YouTubeLiveCoordinator,
         entry: YouTubeLiveConfigEntry,
     ) -> None:
         """Initialize the sensor."""
@@ -64,7 +63,9 @@ class YouTubeLiveUpcomingSensor(
     @property
     def native_value(self) -> int:
         """Return the count of upcoming streams."""
-        streams = self.coordinator.data or []
+        if not self.coordinator.data:
+            return 0
+        streams = self.coordinator.data.streams
         now = datetime.now().astimezone()
         # Filter out streams that have already ended based on default duration
         upcoming = [
@@ -76,7 +77,9 @@ class YouTubeLiveUpcomingSensor(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return flat list of upcoming streams as attributes."""
-        streams = self.coordinator.data or []
+        if not self.coordinator.data:
+            return {}
+        streams = self.coordinator.data.streams
         now = datetime.now().astimezone()
         
         # Sort by start time and filter out past streams

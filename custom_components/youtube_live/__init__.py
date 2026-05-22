@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .coordinator import CalendarCoordinator, StreamStatusCoordinator
+from .coordinator import YouTubeLiveCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,8 +20,7 @@ PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.CALENDAR, Platform
 class YouTubeLiveRuntimeData:
     """Runtime data for a YouTube Live group config entry."""
 
-    calendar_coordinator: CalendarCoordinator
-    stream_status_coordinator: StreamStatusCoordinator
+    coordinator: YouTubeLiveCoordinator
 
 
 type YouTubeLiveConfigEntry = ConfigEntry[YouTubeLiveRuntimeData]
@@ -32,20 +31,15 @@ async def async_setup_entry(
     entry: YouTubeLiveConfigEntry,
 ) -> bool:
     """Set up a YouTube Live group from a config entry."""
-    calendar_coordinator = CalendarCoordinator(hass, entry)
-    stream_status_coordinator = StreamStatusCoordinator(
-        hass, entry, calendar_coordinator
-    )
+    coordinator = YouTubeLiveCoordinator(hass, entry)
 
-    await calendar_coordinator.async_config_entry_first_refresh()
+    await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = YouTubeLiveRuntimeData(
-        calendar_coordinator=calendar_coordinator,
-        stream_status_coordinator=stream_status_coordinator,
+        coordinator=coordinator,
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await stream_status_coordinator.async_config_entry_first_refresh()
 
     return True
 

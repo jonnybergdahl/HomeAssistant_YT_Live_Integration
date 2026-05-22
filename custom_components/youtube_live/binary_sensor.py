@@ -19,7 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import CONF_CHANNEL_HANDLES, DEFAULT_STREAM_DURATION_HOURS, DOMAIN
-from .coordinator import StreamStatusCoordinator
+from .coordinator import YouTubeLiveCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,8 +34,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up binary sensors for a channel group."""
-    runtime_data = entry.runtime_data
-    stream_status_coordinator = runtime_data.stream_status_coordinator
+    coordinator = entry.runtime_data.coordinator
 
     handles: list[str] = list(entry.data.get(CONF_CHANNEL_HANDLES, []))
 
@@ -61,10 +60,10 @@ async def async_setup_entry(
 
     # Add new entities
     entities: list[BinarySensorEntity] = [
-        YouTubeLiveChannelSensor(stream_status_coordinator, entry, handle)
+        YouTubeLiveChannelSensor(coordinator, entry, handle)
         for handle in handles
     ]
-    entities.append(YouTubeLiveGroupSensor(stream_status_coordinator, entry))
+    entities.append(YouTubeLiveGroupSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -79,7 +78,7 @@ def _group_device_info(entry: YouTubeLiveConfigEntry) -> DeviceInfo:
 
 
 class YouTubeLiveChannelSensor(
-    CoordinatorEntity[StreamStatusCoordinator], BinarySensorEntity
+    CoordinatorEntity[YouTubeLiveCoordinator], BinarySensorEntity
 ):
     """Binary sensor indicating whether a specific channel is currently live."""
 
@@ -87,7 +86,7 @@ class YouTubeLiveChannelSensor(
 
     def __init__(
         self,
-        coordinator: StreamStatusCoordinator,
+        coordinator: YouTubeLiveCoordinator,
         entry: YouTubeLiveConfigEntry,
         handle: str,
     ) -> None:
@@ -111,17 +110,19 @@ class YouTubeLiveChannelSensor(
     @property
     def _channel_name(self) -> str:
         """Best known display name for this channel."""
-        key = self.coordinator.calendar_coordinator._hkey(self._handle)
-        return self.coordinator.calendar_coordinator.channel_names.get(
+        key = self.coordinator._hkey(self._handle)
+        return self.coordinator.channel_names.get(
             key, self._handle.lstrip("@")
         )
 
     def _next_stream(self) -> UpcomingStream | None:
         """Return this channel's live stream, or the next upcoming one."""
-        calendar = self.coordinator.calendar_coordinator
-        streams = calendar.streams_for_handle(self._handle)
-        
-        live_statuses = self.coordinator.data.statuses if self.coordinator.data else {}
+        if not self.coordinator.data:
+            return None
+            
+        streams = self.coordinator.streams_for_handle(self._handle)
+        live_statuses = self.coordinator.data.statuses
+        metadata = self.coordinator.data.stream_metadata
         
         # 1. Look for a stream in the calendar that is currently live.
         for stream in streams:
@@ -131,13 +132,12 @@ class YouTubeLiveChannelSensor(
 
         # 2. Look for any stream being tracked that is live for this channel,
         # even if it's no longer in the calendar data.
-        if self.coordinator.data:
-            for vid, status in live_statuses.items():
-                if status.is_live:
-                    if vid in self.coordinator.stream_metadata:
-                        metadata = self.coordinator.stream_metadata[vid]
-                        if metadata.handle == self._handle:
-                            return metadata.stream
+        for vid, status in live_statuses.items():
+            if status.is_live:
+                if vid in metadata:
+                    stream = metadata[vid]
+                    if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(self._handle):
+                        return stream
 
         now = datetime.now().astimezone()
         for stream in streams:
@@ -164,8 +164,8 @@ class YouTubeLiveChannelSensor(
             stream = self._next_stream()
             if stream is not None:
                 return stream.thumbnail_url
-        key = self.coordinator.calendar_coordinator._hkey(self._handle)
-        return self.coordinator.calendar_coordinator.channel_thumbnail_urls.get(key)
+        key = self.coordinator._hkey(self._handle)
+        return self.coordinator.channel_thumbnail_urls.get(key)
 
     @property
     def is_on(self) -> bool | None:
@@ -174,9 +174,10 @@ class YouTubeLiveChannelSensor(
             return None
         
         # Check streams currently in the calendar
-        streams = self.coordinator.calendar_coordinator.streams_for_handle(self._handle)
+        streams = self.coordinator.streams_for_handle(self._handle)
         stream_ids = {s.video_id for s in streams}
         statuses = self.coordinator.data.statuses
+        metadata = self.coordinator.data.stream_metadata
         
         for vid, status in statuses.items():
             if status.is_live:
@@ -185,12 +186,10 @@ class YouTubeLiveChannelSensor(
                     return True
                 
                 # If it's NOT in the calendar, we need to check if it's
-                # one of ours. We can check the full list of streams
-                # currently in the StreamStatusCoordinator's internal states
-                # and see if any that are live match our handle.
-                if vid in self.coordinator.stream_metadata:
-                    metadata = self.coordinator.stream_metadata[vid]
-                    if metadata.handle == self._handle:
+                # one of ours.
+                if vid in metadata:
+                    stream = metadata[vid]
+                    if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(self._handle):
                         return True
         
         return False
@@ -212,7 +211,7 @@ class YouTubeLiveChannelSensor(
 
 
 class YouTubeLiveGroupSensor(
-    CoordinatorEntity[StreamStatusCoordinator], BinarySensorEntity
+    CoordinatorEntity[YouTubeLiveCoordinator], BinarySensorEntity
 ):
     """Binary sensor indicating whether *any* channel in the group is live."""
 
@@ -221,7 +220,7 @@ class YouTubeLiveGroupSensor(
 
     def __init__(
         self,
-        coordinator: StreamStatusCoordinator,
+        coordinator: YouTubeLiveCoordinator,
         entry: YouTubeLiveConfigEntry,
     ) -> None:
         """Initialize the aggregate sensor."""
@@ -250,19 +249,21 @@ class YouTubeLiveGroupSensor(
         if self.coordinator.data is None:
             return None
         
+        streams = self.coordinator.data.streams
         statuses = self.coordinator.data.statuses
+        metadata = self.coordinator.data.stream_metadata
+
         # 1. Check streams currently in the calendar
-        if self.coordinator.calendar_coordinator.data:
-            for stream in self.coordinator.calendar_coordinator.data:
-                status = statuses.get(stream.video_id)
-                if status and status.is_live:
-                    return stream
+        for stream in streams:
+            status = statuses.get(stream.video_id)
+            if status and status.is_live:
+                return stream
         
         # 2. Check streams in metadata (those that might have dropped from calendar)
         for vid, status in statuses.items():
             if status.is_live:
-                if vid in self.coordinator.stream_metadata:
-                    return self.coordinator.stream_metadata[vid].stream
+                if vid in metadata:
+                    return metadata[vid]
                     
         return None
 
@@ -292,15 +293,9 @@ class YouTubeLiveGroupSensor(
         }
 
         if stream := self._first_live_stream:
-            # Find the handle for this stream
             handle = None
-            calendar = self.coordinator.calendar_coordinator
             for h in self._entry.data.get(CONF_CHANNEL_HANDLES, []):
-                key = calendar._hkey(h)
-                display_name = calendar.channel_names.get(key)
-                if (display_name and stream.channel.lower() == display_name.lower()) or (
-                    stream.channel.lower() == h.lstrip("@").lower()
-                ):
+                if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(h):
                     handle = h
                     break
             

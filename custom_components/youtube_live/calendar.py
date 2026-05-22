@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
-from .coordinator import CalendarCoordinator
+from .coordinator import YouTubeLiveCoordinator
 
 if TYPE_CHECKING:
     from . import YouTubeLiveConfigEntry
@@ -27,12 +27,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up one calendar entity per channel group."""
-    runtime_data = entry.runtime_data
     async_add_entities([YouTubeLiveCalendar(entry)])
 
 
 class YouTubeLiveCalendar(
-    CoordinatorEntity[CalendarCoordinator], CalendarEntity
+    CoordinatorEntity[YouTubeLiveCoordinator], CalendarEntity
 ):
     """Calendar entity listing upcoming streams for a single group."""
 
@@ -43,9 +42,8 @@ class YouTubeLiveCalendar(
         entry: YouTubeLiveConfigEntry,
     ) -> None:
         """Initialize the calendar entity."""
-        super().__init__(entry.runtime_data.calendar_coordinator)
+        super().__init__(entry.runtime_data.coordinator)
         self._entry = entry
-        self._stream_status_coordinator = entry.runtime_data.stream_status_coordinator
         self._attr_unique_id = f"{entry.entry_id}_calendar"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -69,8 +67,8 @@ class YouTubeLiveCalendar(
 
         # If the stream is currently live, ensure the end time is in the future.
         if (
-            self._stream_status_coordinator.data
-            and (status := self._stream_status_coordinator.data.statuses.get(stream.video_id))
+            self.coordinator.data
+            and (status := self.coordinator.data.statuses.get(stream.video_id))
             and status.is_live
         ):
             now = dt_util.now()
@@ -88,8 +86,12 @@ class YouTubeLiveCalendar(
     @property
     def event(self) -> CalendarEvent | None:
         """Return the next upcoming event in this group."""
-        streams = self.coordinator.data or []
-        statuses = self._stream_status_coordinator.data.statuses if self._stream_status_coordinator.data else {}
+        if not self.coordinator.data:
+            return None
+            
+        streams = self.coordinator.data.streams
+        statuses = self.coordinator.data.statuses
+        metadata = self.coordinator.data.stream_metadata
         
         # Combine current calendar streams and streams that dropped from calendar but are still live
         all_stream_ids = {s.video_id for s in streams}
@@ -97,8 +99,8 @@ class YouTubeLiveCalendar(
         
         for vid, status in statuses.items():
             if status.is_live and vid not in all_stream_ids:
-                if vid in self._stream_status_coordinator.stream_metadata:
-                    relevant_streams.append(self._stream_status_coordinator.stream_metadata[vid].stream)
+                if vid in metadata:
+                    relevant_streams.append(metadata[vid])
 
         if not relevant_streams:
             return None
@@ -117,8 +119,12 @@ class YouTubeLiveCalendar(
         end_date: datetime,
     ) -> list[CalendarEvent]:
         """Return calendar events within a datetime range."""
-        streams = self.coordinator.data or []
-        statuses = self._stream_status_coordinator.data.statuses if self._stream_status_coordinator.data else {}
+        if not self.coordinator.data:
+            return []
+            
+        streams = self.coordinator.data.streams
+        statuses = self.coordinator.data.statuses
+        metadata = self.coordinator.data.stream_metadata
         
         # Combine current calendar streams and streams that dropped from calendar but are still live
         all_stream_ids = {s.video_id for s in streams}
@@ -126,8 +132,8 @@ class YouTubeLiveCalendar(
         
         for vid, status in statuses.items():
             if status.is_live and vid not in all_stream_ids:
-                if vid in self._stream_status_coordinator.stream_metadata:
-                    relevant_streams.append(self._stream_status_coordinator.stream_metadata[vid].stream)
+                if vid in metadata:
+                    relevant_streams.append(metadata[vid])
         
         events: list[CalendarEvent] = []
         for stream in relevant_streams:
