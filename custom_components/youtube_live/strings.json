@@ -43,12 +43,5 @@
             "channel_not_found": "One or more channels were not found on YouTube. Check the handles and try again (handles are case-sensitive).",
             "no_channels": "Add at least one channel handle."
         }
-    },
-    "entity": {
-        "binary_sensor": {
-            "group_any_live": {
-                "name": "Any channel live"
-            }
-        }
     }
 }

@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import slugify
+from homeassistant.util import dt as dt_util, slugify
 
-from .const import CONF_CHANNEL_HANDLES, DEFAULT_STREAM_DURATION_HOURS, DOMAIN
+from .const import CONF_CHANNEL_HANDLES, DOMAIN
 from .coordinator import YouTubeLiveCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +82,8 @@ class YouTubeLiveChannelSensor(
     """Binary sensor indicating whether a specific channel is currently live."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
+    # Names embed the channel/group title, so opt out of device-based naming.
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -92,11 +93,6 @@ class YouTubeLiveChannelSensor(
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
-        # Must be set as instance attr AFTER super().__init__() so the
-        # @cached_property Entity.has_entity_name picks it up and the
-        # entity registry stores False — preventing HA from prepending
-        # the device name to the friendly_name.
-        self._attr_has_entity_name = False
         self._entry = entry
         self._handle = handle
         handle_slug = slugify(handle.lstrip("@"))
@@ -105,12 +101,16 @@ class YouTubeLiveChannelSensor(
         object_id = f"youtube_live_{handle_slug}"
         self._attr_suggested_object_id = object_id
         self.entity_id = f"binary_sensor.{object_id}"
-        self._attr_name = f"{handle.lstrip('@')} Live"
+
+    @property
+    def name(self) -> str:
+        """Friendly name for the channel sensor."""
+        return self._channel_name
 
     @property
     def _channel_name(self) -> str:
         """Best known display name for this channel."""
-        key = self.coordinator._hkey(self._handle)
+        key = self.coordinator.handle_key(self._handle)
         return self.coordinator.channel_names.get(
             key, self._handle.lstrip("@")
         )
@@ -136,26 +136,14 @@ class YouTubeLiveChannelSensor(
             if status.is_live:
                 if vid in metadata:
                     stream = metadata[vid]
-                    if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(self._handle):
+                    if self.coordinator.stream_handle_key(stream) == self.coordinator.handle_key(self._handle):
                         return stream
 
-        now = datetime.now().astimezone()
+        now = dt_util.now()
         for stream in streams:
-            # Skip streams that have ended according to the status coordinator
-            status = live_statuses.get(stream.video_id)
-            if status and status.ended:
-                continue
-
-            end = stream.scheduled_start + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS)
-            if end > now:
+            if self.coordinator.is_stream_active(stream, now):
                 return stream
         return None
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Update the friendly name when coordinator data changes."""
-        self._attr_name = self._channel_name
-        super()._handle_coordinator_update()
 
     @property
     def entity_picture(self) -> str | None:
@@ -164,7 +152,7 @@ class YouTubeLiveChannelSensor(
             stream = self._next_stream()
             if stream is not None:
                 return stream.thumbnail_url
-        key = self.coordinator._hkey(self._handle)
+        key = self.coordinator.handle_key(self._handle)
         return self.coordinator.channel_thumbnail_urls.get(key)
 
     @property
@@ -189,7 +177,7 @@ class YouTubeLiveChannelSensor(
                 # one of ours.
                 if vid in metadata:
                     stream = metadata[vid]
-                    if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(self._handle):
+                    if self.coordinator.stream_handle_key(stream) == self.coordinator.handle_key(self._handle):
                         return True
         
         return False
@@ -216,7 +204,8 @@ class YouTubeLiveGroupSensor(
     """Binary sensor indicating whether *any* channel in the group is live."""
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_translation_key = "group_any_live"
+    # Names embed the channel/group title, so opt out of device-based naming.
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -225,7 +214,6 @@ class YouTubeLiveGroupSensor(
     ) -> None:
         """Initialize the aggregate sensor."""
         super().__init__(coordinator)
-        self._attr_has_entity_name = False
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_any_live"
         self._attr_device_info = _group_device_info(entry)
@@ -295,7 +283,7 @@ class YouTubeLiveGroupSensor(
         if stream := self._first_live_stream:
             handle = None
             for h in self._entry.data.get(CONF_CHANNEL_HANDLES, []):
-                if self.coordinator._get_stream_handle_key(stream) == self.coordinator._hkey(h):
+                if self.coordinator.stream_handle_key(stream) == self.coordinator.handle_key(h):
                     handle = h
                     break
             

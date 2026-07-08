@@ -7,7 +7,13 @@ from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.youtube_live.const import CONF_CHANNEL_HANDLES, DOMAIN
+from yt_live_scraper import StreamLiveStatus
+
+from custom_components.youtube_live.const import (
+    CONF_CHANNEL_HANDLES,
+    DEFAULT_STREAM_DURATION_HOURS,
+    DOMAIN,
+)
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -93,6 +99,69 @@ async def test_calendar_empty(
     state = hass.states.get("calendar.youtube_live_test_group")
     assert state is not None
     assert state.state == "off"
+
+
+async def test_calendar_ended_stream_uses_observed_end_time(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stream that has ended reports its observed end, not the 2h default."""
+    now = datetime.now(timezone.utc)
+    stream = make_stream(
+        video_id="ended_cal",
+        title="Short Stream",
+        channel="TestChannel",
+        scheduled_start=now - timedelta(minutes=5),
+        live=True,
+    )
+
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        # First refresh: stream is live.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await hass.config_entries.async_setup(mock_config_entry.entry_id)
+            await hass.async_block_till_done()
+
+        coordinator = mock_config_entry.runtime_data.coordinator
+
+        # Second refresh: stream is no longer live -> it just ended.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=False),
+        ):
+            await coordinator.async_refresh()
+            await hass.async_block_till_done()
+
+    ended_at = coordinator.data.statuses["ended_cal"].ended_at
+    assert ended_at is not None
+
+    entity_id = "calendar.youtube_live_test_group"
+    events = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {
+            "entity_id": entity_id,
+            "start_date_time": (now - timedelta(hours=1)).isoformat(),
+            "end_date_time": (now + timedelta(hours=1)).isoformat(),
+        },
+        blocking=True,
+        return_response=True,
+    )
+    event = events[entity_id]["events"][0]
+    end = datetime.fromisoformat(event["end"])
+
+    # End matches the observed end time, well short of the default duration.
+    assert end == ended_at
+    assert end < stream.scheduled_start + timedelta(
+        hours=DEFAULT_STREAM_DURATION_HOURS
+    )
 
 
 async def test_calendar_per_group_scoping(

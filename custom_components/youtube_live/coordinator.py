@@ -19,6 +19,7 @@ from .const import (
     CONF_CHANNEL_HANDLES,
     DEFAULT_CALENDAR_INTERVAL,
     DEFAULT_SENSOR_INTERVAL,
+    DEFAULT_STREAM_DURATION_HOURS,
     DOMAIN,
 )
 
@@ -35,6 +36,9 @@ class StreamStatus:
     is_live: bool = False
     was_live: bool = False
     ended: bool = False
+    # UTC time at which the stream was first observed to have ended after being
+    # live. ``None`` when the stream never went live or is still ongoing.
+    ended_at: datetime | None = None
 
 
 @dataclass
@@ -72,12 +76,16 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         self.channel_ids: dict[str, str] = {}
 
         self._last_calendar_update: datetime | None = None
+        # Working state, mutated across update cycles. Each cycle snapshots
+        # these into a fresh YouTubeLiveCoordinatorData; self.data itself is
+        # never mutated in place.
+        self._streams: list[UpcomingStream] = []
         self._stream_states: dict[str, StreamStatus] = {}
         # video_id -> UpcomingStream
         self._stream_metadata: dict[str, UpcomingStream] = {}
 
     @staticmethod
-    def _hkey(handle: str) -> str:
+    def handle_key(handle: str) -> str:
         """Canonical key for matching handles."""
         h = handle.strip()
         if not h.startswith("@"):
@@ -99,7 +107,7 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         await self._update_stream_statuses()
 
         return YouTubeLiveCoordinatorData(
-            streams=self.data.streams if self.data else [],
+            streams=list(self._streams),
             statuses=dict(self._stream_states),
             stream_metadata=dict(self._stream_metadata),
         )
@@ -109,7 +117,7 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         self.channel_handles = list(
             self.config_entry.data.get(CONF_CHANNEL_HANDLES, [])
         )
-        current_keys = {self._hkey(h) for h in self.channel_handles}
+        current_keys = {self.handle_key(h) for h in self.channel_handles}
         self.channel_thumbnail_urls = {k: v for k, v in self.channel_thumbnail_urls.items() if k in current_keys}
         self.channel_names = {k: v for k, v in self.channel_names.items() if k in current_keys}
         self.channel_ids = {k: v for k, v in self.channel_ids.items() if k in current_keys}
@@ -120,15 +128,15 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
             )
         except Exception as err:
             _LOGGER.error("Error fetching streams: %s", err, exc_info=True)
-            # If we already have data, we might want to keep it, but HA expects us to raise if we can't update.
-            # However, this is a partial update.
-            if not self.data:
+            # Keep the previously fetched streams if we have any; only fail the
+            # update outright when we have nothing to fall back on.
+            if not self._streams:
                 raise UpdateFailed(f"Error fetching streams: {err}") from err
-            streams = self.data.streams
+            streams = self._streams
 
         # Update metadata maps
         for stream in streams:
-            key = self._get_stream_handle_key(stream)
+            key = self.stream_handle_key(stream)
             if key:
                 if stream.channel_thumbnail_url:
                     self.channel_thumbnail_urls[key] = stream.channel_thumbnail_url
@@ -139,7 +147,7 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
 
         # For channels without streams, fetch info directly
         for handle in self.channel_handles:
-            key = self._hkey(handle)
+            key = self.handle_key(handle)
             if key not in self.channel_thumbnail_urls or key not in self.channel_names:
                 try:
                     info = await self.hass.async_add_executor_job(get_channel_info, handle)
@@ -152,15 +160,12 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
                 except Exception as err:
                     _LOGGER.debug("Could not fetch channel info for %s: %s", handle, err)
 
-        if self.data:
-            self.data.streams = streams
-        else:
-            self.data = YouTubeLiveCoordinatorData(streams=streams)
+        self._streams = streams
 
-    def _get_stream_handle_key(self, stream: UpcomingStream) -> str | None:
+    def stream_handle_key(self, stream: UpcomingStream) -> str | None:
         """Find the handle key associated with a stream."""
         for handle in self.channel_handles:
-            key = self._hkey(handle)
+            key = self.handle_key(handle)
             channel_id = self.channel_ids.get(key)
             if channel_id and stream.channel_id == channel_id:
                 return key
@@ -187,7 +192,7 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
 
     async def _update_stream_statuses(self) -> None:
         """Poll live status for active streams."""
-        streams = self.data.streams if self.data else []
+        streams = self._streams
         now = dt_util.utcnow()
 
         # Cleanup states
@@ -237,16 +242,57 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
                     state.was_live = True
                 elif state.was_live:
                     state.ended = True
+                    state.ended_at = now
                 elif stream and now > stream.scheduled_start + timedelta(minutes=ACTIVE_WINDOW_MINUTES):
                     state.ended = True
-            except Exception:
-                _LOGGER.debug("Error checking live status for %s", video_id, exc_info=True)
+            except Exception as err:
+                _LOGGER.warning("Error checking live status for %s: %s", video_id, err)
+
+    def relevant_streams(self) -> list[UpcomingStream]:
+        """Return the shared set of streams to surface across all platforms.
+
+        This is the single source of truth for "which streams exist": every
+        upcoming/known stream, plus any stream that is still live but has
+        dropped out of the scraper's list (recovered from stream_metadata).
+        """
+        if not self.data:
+            return []
+        streams = list(self.data.streams)
+        known = {s.video_id for s in streams}
+        for video_id, status in self.data.statuses.items():
+            if status.is_live and video_id not in known:
+                meta = self.data.stream_metadata.get(video_id)
+                if meta is not None:
+                    streams.append(meta)
+        return streams
+
+    def stream_end_time(self, stream: UpcomingStream) -> datetime:
+        """Return the effective end time for a stream.
+
+        Uses the observed end time once a stream that was live has ended,
+        otherwise falls back to the default stream duration.
+        """
+        status = self.data.statuses.get(stream.video_id) if self.data else None
+        if status and status.ended and status.ended_at:
+            return status.ended_at
+        return stream.scheduled_start + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS)
+
+    def is_stream_active(
+        self, stream: UpcomingStream, now: datetime | None = None
+    ) -> bool:
+        """Return whether a stream is still live or has not yet finished."""
+        status = self.data.statuses.get(stream.video_id) if self.data else None
+        if status and status.is_live:
+            return True
+        if now is None:
+            now = dt_util.now()
+        return self.stream_end_time(stream) > now
 
     def streams_for_handle(self, handle: str) -> list[UpcomingStream]:
         """Return the streams that belong to a specific handle."""
         if not self.data or not self.data.streams:
             return []
-        key = self._hkey(handle)
+        key = self.handle_key(handle)
         channel_id = self.channel_ids.get(key)
         display_name = self.channel_names.get(key)
         bare = handle.lstrip("@").lower()

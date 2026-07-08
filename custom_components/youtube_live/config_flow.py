@@ -15,7 +15,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
 
@@ -44,7 +44,7 @@ def _normalize_handle(handle: str) -> str:
 
 
 async def _validate_handles(
-    hass, handles: list[str]
+    hass: HomeAssistant, handles: list[str]
 ) -> tuple[list[str], dict[str, str]]:
     """Normalize and validate a list of channel handles.
 

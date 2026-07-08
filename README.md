@@ -9,7 +9,7 @@ A Home Assistant custom integration that monitors YouTube channels for upcoming 
 - **Per-channel binary sensor** that turns on when that specific channel goes live
 - **Aggregate group sensor** that turns on when *any* channel in the group is live
 - Edit the channels in a group at any time via the integration's options
-- Automatic polling: calendars update hourly; live status checks run every minute within a 15-minute window around the scheduled start time
+- Automatic polling: the upcoming-stream list refreshes every 10 minutes; live status checks run every minute within a 15-minute window around the scheduled start time
 - No API key required
 
 ## Installation
@@ -62,13 +62,15 @@ Every group produces one Home Assistant device containing:
 
 ### Calendar
 
-One **`calendar.youtube_live_<group>`** entity listing upcoming live streams for that group's channels. Updated once per hour.
+One **`calendar.youtube_live_<group>`** entity listing upcoming live streams for that group's channels. The list is refreshed every 10 minutes.
+
+Each event uses `<channel> - <title>` as its summary, the stream URL as its description, and the YouTube video ID as its unique ID. Events are assumed to run for 2 hours from the scheduled start; a stream that is still live keeps its event open, and once a stream ends the event's end time is trimmed to when it actually ended.
 
 ### Per-channel binary sensors
 
 One **`binary_sensor.youtube_live_<handle>`** per channel in the group. The sensor turns **on** when any stream on that channel is currently live, **off** otherwise.
 
-The friendly name dynamically shows the title of the channel's next upcoming or current stream. When no streams are scheduled it falls back to **\<channel\> Live**. The entity picture shows the stream thumbnail when a stream is live or upcoming, and the channel's avatar otherwise.
+The friendly name is the channel's display name (falling back to the handle without its leading `@` until the display name has been fetched). The entity picture shows the current stream's thumbnail while the channel is live, and the channel's avatar otherwise.
 
 Live status polling starts 15 minutes before the scheduled start time and runs every minute. Polling stops when the stream ends, or 15 minutes after the scheduled start time if the stream never started.
 
@@ -79,9 +81,12 @@ Each per-channel sensor includes extra state attributes:
 | `channel_handle` | Channel handle (e.g. `@home_assistant`) |
 | `channel_name` | Channel display name (e.g. `Home Assistant`) |
 | `group` | Name of the group this channel belongs to |
-| `stream_id` | Video ID of the next upcoming or current stream |
-| `url` | URL of the next upcoming or current stream |
-| `stream_start` | Scheduled start time (ISO 8601) |
+| `stream_id` | Video ID of the current live stream |
+| `stream_title` | Title of the current live stream |
+| `url` | URL of the current live stream |
+| `stream_start` | Start time of the current live stream (ISO 8601) |
+
+The `stream_*` attributes are populated only while the channel is live; otherwise they are `null`.
 
 ### Group aggregate sensor
 
@@ -96,11 +101,20 @@ Attributes:
 | `live_stream_ids` | Video IDs of streams currently live |
 | `live_count` | Number of streams currently live |
 
+When at least one stream is live, these additional attributes describe the first live stream:
+
+| Attribute | Description |
+|---|---|
+| `live_channel_handle` | Handle of the live channel |
+| `live_channel_name` | Display name of the live channel |
+| `live_stream_title` | Title of the live stream |
+| `live_url` | URL of the live stream |
+
 ### Upcoming streams sensor (for ESPHome)
 
-One **`sensor.youtube_live_<group>_upcoming`** per group. The state is an integer count of upcoming streams (max 5). 
+One **`sensor.youtube_live_<group>_upcoming`** per group. The state is the number of upcoming or currently-live streams in the group.
 
-This sensor is designed for easy consumption by ESPHome devices (e.g., using `text_sensor` with `attribute` mapping). It provides a flat list of the next 5 upcoming streams as attributes.
+This sensor is designed for easy consumption by ESPHome devices (e.g., using `text_sensor` with `attribute` mapping). It exposes the next 5 streams (ordered by start time) as a flat list of attributes.
 
 Attributes:
 
@@ -110,9 +124,9 @@ Attributes:
 | `event_i_start` | Scheduled start time (ISO 8601 UTC) |
 | `event_i_video_id` | YouTube video ID |
 | `event_i_channel` | Channel name |
-| `event_i_duration` | Expected duration in minutes |
+| `event_i_duration` | Duration in minutes (120 by default, or the actual length once the stream has ended) |
 
-...where `i` is 0 to 4. Empty slots are represented as empty strings `""`.
+...where `i` is 0 to 4, ordered by start time. Unused slots use empty strings `""` for the text fields and `0` for `event_i_duration`.
 
 ## Usage
 

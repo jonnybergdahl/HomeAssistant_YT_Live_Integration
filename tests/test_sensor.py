@@ -6,6 +6,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+
+from yt_live_scraper import StreamLiveStatus
+
 from custom_components.youtube_live.const import DOMAIN
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -66,10 +69,63 @@ async def test_upcoming_sensor_attributes(
     assert attrs["event_2_video_id"] == ""
     assert attrs["event_2_channel"] == ""
     assert attrs["event_2_start"] == ""
-    assert attrs["event_2_duration"] == ""
+    assert attrs["event_2_duration"] == 0
     
     # Stream 4 - empty
     assert attrs["event_4_title"] == ""
+
+
+async def test_upcoming_sensor_drops_ended_stream(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stream that has ended stops counting as upcoming (honors ended_at).
+
+    The scheduled start is only 5 minutes ago, so under the old fixed-2h
+    logic it would still count for ~2 hours after ending. The sensor must
+    instead defer to the coordinator's ended state.
+    """
+    now = datetime.now(timezone.utc)
+    stream = make_stream(
+        video_id="ended_sensor",
+        title="Short Stream",
+        channel="TestChannel",
+        scheduled_start=now - timedelta(minutes=5),
+        live=True,
+    )
+
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        # First refresh: stream is live -> counts as upcoming.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await hass.config_entries.async_setup(mock_config_entry.entry_id)
+            await hass.async_block_till_done()
+
+        state = hass.states.get("sensor.youtube_live_test_group_upcoming")
+        assert state.state == "1"
+
+        coordinator = mock_config_entry.runtime_data.coordinator
+
+        # Second refresh: no longer live -> it just ended.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=False),
+        ):
+            await coordinator.async_refresh()
+            await hass.async_block_till_done()
+
+    assert coordinator.data.statuses["ended_sensor"].ended is True
+
+    state = hass.states.get("sensor.youtube_live_test_group_upcoming")
+    assert state.state == "0"
+    assert state.attributes["event_0_title"] == ""
 
 
 async def test_upcoming_sensor_no_streams(

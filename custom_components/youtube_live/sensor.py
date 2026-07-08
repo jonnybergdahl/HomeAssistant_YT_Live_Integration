@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorEntity
@@ -11,12 +10,14 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import slugify
+from homeassistant.util import dt as dt_util, slugify
 
-from .const import DEFAULT_STREAM_DURATION_HOURS, DOMAIN
+from .const import DOMAIN
 from .coordinator import YouTubeLiveCoordinator
 
 if TYPE_CHECKING:
+    from yt_live_scraper import UpcomingStream
+
     from . import YouTubeLiveConfigEntry
 
 
@@ -34,7 +35,8 @@ class YouTubeLiveUpcomingSensor(
 ):
     """Sensor showing upcoming streams in a flat format for ESPHome."""
 
-    _attr_translation_key = "upcoming_streams"
+    # Names embed the channel/group title, so opt out of device-based naming.
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -43,8 +45,6 @@ class YouTubeLiveUpcomingSensor(
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        # Prevent HA from using device name in the entity name
-        self._attr_has_entity_name = False
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_upcoming"
         self._attr_device_info = DeviceInfo(
@@ -60,36 +60,29 @@ class YouTubeLiveUpcomingSensor(
         """Return the name of the sensor."""
         return f"{self._entry.title} upcoming"
 
+    def _upcoming_streams(self) -> list[UpcomingStream]:
+        """Return the group's still-active streams, sorted by start time.
+
+        Uses the coordinator's shared stream set and active check so this
+        sensor stays consistent with the calendar and binary sensors.
+        """
+        now = dt_util.now()
+        upcoming = [
+            s
+            for s in self.coordinator.relevant_streams()
+            if self.coordinator.is_stream_active(s, now)
+        ]
+        return sorted(upcoming, key=lambda s: s.scheduled_start)
+
     @property
     def native_value(self) -> int:
         """Return the count of upcoming streams."""
-        if not self.coordinator.data:
-            return 0
-        streams = self.coordinator.data.streams
-        now = datetime.now().astimezone()
-        # Filter out streams that have already ended based on default duration
-        upcoming = [
-            s for s in streams 
-            if s.scheduled_start.astimezone() + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS) > now
-        ]
-        return len(upcoming)
+        return len(self._upcoming_streams())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return flat list of upcoming streams as attributes."""
-        if not self.coordinator.data:
-            return {}
-        streams = self.coordinator.data.streams
-        now = datetime.now().astimezone()
-        
-        # Sort by start time and filter out past streams
-        upcoming = sorted(
-            [
-                s for s in streams 
-                if s.scheduled_start.astimezone() + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS) > now
-            ],
-            key=lambda s: s.scheduled_start
-        )
+        upcoming = self._upcoming_streams()
 
         attrs = {}
         for i in range(5):
@@ -99,17 +92,19 @@ class YouTubeLiveUpcomingSensor(
                 title = stream.title or ""
                 if len(title) > 80:
                     title = title[:77] + "..."
-                
+
+                duration = self.coordinator.stream_end_time(stream) - stream.scheduled_start
                 attrs[f"{prefix}_title"] = title
                 attrs[f"{prefix}_start"] = stream.scheduled_start.isoformat()
                 attrs[f"{prefix}_video_id"] = stream.video_id
                 attrs[f"{prefix}_channel"] = stream.channel
-                attrs[f"{prefix}_duration"] = DEFAULT_STREAM_DURATION_HOURS * 60
+                attrs[f"{prefix}_duration"] = int(duration.total_seconds() // 60)
             else:
                 attrs[f"{prefix}_title"] = ""
                 attrs[f"{prefix}_start"] = ""
                 attrs[f"{prefix}_video_id"] = ""
                 attrs[f"{prefix}_channel"] = ""
-                attrs[f"{prefix}_duration"] = ""
+                # Keep a stable int type for duration across all slots.
+                attrs[f"{prefix}_duration"] = 0
 
         return attrs
