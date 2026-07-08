@@ -2,6 +2,8 @@
 
 A Home Assistant custom integration that monitors YouTube channels for upcoming live streams. Channels are organised into **groups** (e.g. "Gaming", "Technology"): each group becomes a device in Home Assistant with a calendar of its upcoming streams, a binary sensor for every channel in the group, and an aggregate "any channel live" binary sensor.
 
+![widgets.png](images/widgets.png)
+
 ## Features
 
 - **Channel groups** — organise the channels you monitor into named groups (one config entry per group)
@@ -41,9 +43,23 @@ Click the button to add a YouTube Live channel group to Home Assistant.
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=youtube_live)
 
-1. Pick a **group name** (e.g. `Gaming`, `Technology`). This will be the device name in Home Assistant.
+1. Pick a **group name** (e.g. `Gaming`, `Technology`). This will be part of the device name in Home Assistant.
 2. Add one or more **channel handles** (e.g. `@home_assistant`) using the list control — click **Add** to enter each handle.
 3. Click **Submit**.
+ 
+![add.png](images/add.png)
+
+4. Set area.
+
+![area.png](images/area.png)
+
+The resulting sensors:
+
+![sensors.png](images/sensors.png)
+
+The calendar:
+
+![calendar.png](images/calendar.png)
 
 You can also set it up manually:
 
@@ -52,7 +68,7 @@ You can also set it up manually:
 3. Enter a group name and the channel handles you want to include
 4. Click **Submit**
 
-To add or remove channels later, open the integration's **Configure** action and edit the list. Changes take effect immediately.
+ > To add or remove channels later, open the integration's **Configure** action and edit the list. Changes take effect immediately.
 
 Create additional groups the same way — each group is independent and gets its own device, calendar, and sensors.
 
