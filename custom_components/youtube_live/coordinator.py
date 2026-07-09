@@ -39,6 +39,10 @@ class StreamStatus:
     # UTC time at which the stream was first observed to have ended after being
     # live. ``None`` when the stream never went live or is still ongoing.
     ended_at: datetime | None = None
+    # Consecutive not-live polls seen while the stream was live. Used to avoid
+    # declaring a stream ended on a single transient scraper/network blip
+    # (is_stream_live returns not-live on request/parse errors).
+    not_live_streak: int = 0
 
 
 @dataclass
@@ -213,22 +217,25 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
             if stream.video_id not in self._stream_states:
                 if self._is_in_active_window(stream) or stream.live:
                     self._stream_states[stream.video_id] = StreamStatus()
-            
+
             if stream.video_id in self._stream_states and stream.video_id not in self._stream_metadata:
                 self._stream_metadata[stream.video_id] = stream
 
         # Poll them
         for video_id, state in list(self._stream_states.items()):
-            if state.ended:
-                continue
-            
             stream = next((s for s in streams if s.video_id == video_id), None)
-            
-            # Decide whether to poll
+
+            # An ended stream is terminal and no longer polled, unless the
+            # channel page still lists it as live -- in which case keep polling
+            # so a stream that was wrongly ended (e.g. during a scraper/network
+            # outage) can recover on a real live reading.
+            if state.ended and not (stream is not None and stream.live):
+                continue
+
             should_poll = state.is_live
             if not should_poll and stream:
                 should_poll = stream.live or self._is_in_active_window(stream)
-            
+
             if not should_poll:
                 continue
 
@@ -236,13 +243,28 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
                 result: StreamLiveStatus = await self.hass.async_add_executor_job(is_stream_live, video_id)
                 if stream and result.actual_start:
                     stream.scheduled_start = result.actual_start
-                
+
                 state.is_live = result.is_live
-                if state.is_live:
+                if result.is_live:
+                    # Live now -- this also recovers a stream that was
+                    # previously (wrongly) marked ended.
                     state.was_live = True
+                    state.ended = False
+                    state.ended_at = None
+                    state.not_live_streak = 0
+                elif state.ended:
+                    # Already ended and still not live: keep it ended, so the
+                    # end time does not flip-flop while the channel page is
+                    # briefly stale.
+                    pass
                 elif state.was_live:
-                    state.ended = True
-                    state.ended_at = now
+                    # Require two consecutive not-live polls before declaring
+                    # the stream ended, so a single transient blip does not
+                    # latch it as ended.
+                    state.not_live_streak += 1
+                    if state.not_live_streak >= 2:
+                        state.ended = True
+                        state.ended_at = now
                 elif stream and now > stream.scheduled_start + timedelta(minutes=ACTIVE_WINDOW_MINUTES):
                     state.ended = True
             except Exception as err:
@@ -270,10 +292,17 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         """Return the effective end time for a stream.
 
         Uses the observed end time once a stream that was live has ended,
-        otherwise falls back to the default stream duration.
+        otherwise falls back to the default stream duration. The observed end
+        is only used when it is after the (possibly re-stamped) start, so the
+        end is never before the start.
         """
         status = self.data.statuses.get(stream.video_id) if self.data else None
-        if status and status.ended and status.ended_at:
+        if (
+            status
+            and status.ended
+            and status.ended_at
+            and status.ended_at > stream.scheduled_start
+        ):
             return status.ended_at
         return stream.scheduled_start + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS)
 

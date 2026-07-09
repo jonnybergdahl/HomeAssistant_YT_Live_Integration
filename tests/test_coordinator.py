@@ -9,7 +9,12 @@ from homeassistant.core import HomeAssistant
 
 from yt_live_scraper import StreamLiveStatus
 
-from custom_components.youtube_live.coordinator import YouTubeLiveCoordinator
+from custom_components.youtube_live.const import DEFAULT_STREAM_DURATION_HOURS
+from custom_components.youtube_live.coordinator import (
+    StreamStatus,
+    YouTubeLiveCoordinator,
+    YouTubeLiveCoordinatorData,
+)
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -194,6 +199,10 @@ async def test_stream_status_detects_ended(
             "custom_components.youtube_live.coordinator.is_stream_live",
             return_value=StreamLiveStatus(is_live=False),
         ):
+            # A single not-live poll is treated as a transient blip.
+            await coordinator.async_refresh()
+            assert coordinator.data.statuses["ended1"].ended is False
+            # A second consecutive not-live poll ends the stream.
             await coordinator.async_refresh()
 
     status = coordinator.data.statuses["ended1"]
@@ -233,3 +242,170 @@ async def test_stream_status_corrects_start_time(
 
     assert stream.scheduled_start == actual_start
     assert coordinator.data.statuses["live_corrected"].is_live is True
+
+
+async def test_stream_status_single_not_live_is_transient(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A single not-live poll must not end a live stream, and a later live
+    poll clears the transient state (guards against scraper/network blips)."""
+    now = datetime.now(timezone.utc)
+    stream = make_stream(
+        video_id="blip",
+        title="Blip Stream",
+        scheduled_start=now + timedelta(minutes=5),
+    )
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        mock_config_entry.add_to_hass(hass)
+        coordinator = YouTubeLiveCoordinator(hass, mock_config_entry)
+
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await coordinator.async_refresh()
+
+        # A single not-live reading is treated as a transient blip.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=False),
+        ):
+            await coordinator.async_refresh()
+        status = coordinator.data.statuses["blip"]
+        assert status.ended is False
+        assert status.not_live_streak == 1
+
+        # A subsequent live reading clears the transient not-live streak.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await coordinator.async_refresh()
+        status = coordinator.data.statuses["blip"]
+        assert status.is_live is True
+        assert status.ended is False
+        assert status.not_live_streak == 0
+
+
+async def test_stream_status_recovers_on_live_poll(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stream that got marked ended (e.g. during an outage) recovers when a
+    later poll reads it live again, while the channel page still lists it as
+    live so polling continues."""
+    now = datetime.now(timezone.utc)
+    stream = make_stream(
+        video_id="stuck",
+        title="Stuck Stream",
+        scheduled_start=now + timedelta(minutes=5),
+        live=True,
+    )
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        mock_config_entry.add_to_hass(hass)
+        coordinator = YouTubeLiveCoordinator(hass, mock_config_entry)
+
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await coordinator.async_refresh()
+
+        # Two consecutive not-live polls mark it ended.
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=False),
+        ):
+            await coordinator.async_refresh()
+            await coordinator.async_refresh()
+            assert coordinator.data.statuses["stuck"].ended is True
+
+        # A real live reading recovers it (the channel page still lists it as
+        # live, so it is still being polled).
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await coordinator.async_refresh()
+        status = coordinator.data.statuses["stuck"]
+        assert status.ended is False
+        assert status.is_live is True
+        assert status.ended_at is None
+
+
+async def test_stream_status_stays_ended_while_channel_stale_live(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """After a genuine end, further not-live polls keep the stream ended even
+    while the (stale) channel page still lists it as live -- no flip-flop."""
+    now = datetime.now(timezone.utc)
+    stream = make_stream(
+        video_id="done",
+        title="Done Stream",
+        scheduled_start=now + timedelta(minutes=5),
+        live=True,
+    )
+    with patch(
+        "custom_components.youtube_live.coordinator.get_upcoming_streams",
+        return_value=[stream],
+    ):
+        mock_config_entry.add_to_hass(hass)
+        coordinator = YouTubeLiveCoordinator(hass, mock_config_entry)
+
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=True),
+        ):
+            await coordinator.async_refresh()
+
+        with patch(
+            "custom_components.youtube_live.coordinator.is_stream_live",
+            return_value=StreamLiveStatus(is_live=False),
+        ):
+            await coordinator.async_refresh()
+            await coordinator.async_refresh()
+            ended_at = coordinator.data.statuses["done"].ended_at
+            assert ended_at is not None
+
+            # Further not-live polls must not un-end it or move the end time.
+            await coordinator.async_refresh()
+            await coordinator.async_refresh()
+
+        status = coordinator.data.statuses["done"]
+        assert status.ended is True
+        assert status.ended_at == ended_at
+
+
+async def test_stream_end_time_never_before_start(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stale ``ended_at`` earlier than the (re-stamped) start must not yield
+    an end before the start, which HA rejects as an invalid CalendarEvent."""
+    now = datetime.now(timezone.utc)
+    stream = make_stream(video_id="stale", scheduled_start=now)
+    mock_config_entry.add_to_hass(hass)
+    coordinator = YouTubeLiveCoordinator(hass, mock_config_entry)
+    coordinator.data = YouTubeLiveCoordinatorData(
+        streams=[stream],
+        statuses={
+            "stale": StreamStatus(
+                was_live=True,
+                ended=True,
+                ended_at=now - timedelta(hours=3),
+            )
+        },
+        stream_metadata={"stale": stream},
+    )
+
+    end = coordinator.stream_end_time(stream)
+    assert end > stream.scheduled_start
+    assert end == stream.scheduled_start + timedelta(hours=DEFAULT_STREAM_DURATION_HOURS)

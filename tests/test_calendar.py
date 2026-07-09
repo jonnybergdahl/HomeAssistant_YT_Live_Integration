@@ -131,11 +131,13 @@ async def test_calendar_ended_stream_uses_observed_end_time(
 
         coordinator = mock_config_entry.runtime_data.coordinator
 
-        # Second refresh: stream is no longer live -> it just ended.
+        # Stream drops offline. The first not-live poll is treated as a blip;
+        # the second consecutive one ends it.
         with patch(
             "custom_components.youtube_live.coordinator.is_stream_live",
             return_value=StreamLiveStatus(is_live=False),
         ):
+            await coordinator.async_refresh()
             await coordinator.async_refresh()
             await hass.async_block_till_done()
 

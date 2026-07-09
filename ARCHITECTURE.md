@@ -47,7 +47,7 @@ The integration uses a single `YouTubeLiveCoordinator` to manage data fetching a
 - **Responsibility**: Manages both broad channel scans for upcoming streams and targeted live-status checks for active streams.
 - **Data Source**: `yt-live-scraper.scraper.get_upcoming_streams` and `yt-live-scraper.scraper.is_stream_live`.
 - **Update Strategy**:
-    - **Broad Update**: Every 10 minutes (`DEFAULT_CALENDAR_INTERVAL`), it fetches the full list of upcoming streams for all channels in the group.
+    - **Broad Update**: Every 5 minutes (`DEFAULT_CALENDAR_INTERVAL`), it fetches the full list of upcoming streams for all channels in the group.
     - **Targeted Update**: Every 1 minute (`DEFAULT_SENSOR_INTERVAL`), it checks the live status of streams that are either currently live or scheduled to start soon.
 - **Data**: A `YouTubeLiveCoordinatorData` object containing:
     - `streams`: Current list of upcoming streams.

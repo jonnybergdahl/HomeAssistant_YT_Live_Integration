@@ -11,7 +11,7 @@ A Home Assistant custom integration that monitors YouTube channels for upcoming 
 - **Per-channel binary sensor** that turns on when that specific channel goes live
 - **Aggregate group sensor** that turns on when *any* channel in the group is live
 - Edit the channels in a group at any time via the integration's options
-- Automatic polling: the upcoming-stream list refreshes every 10 minutes; live status checks run every minute within a 15-minute window around the scheduled start time
+- Automatic polling: the upcoming-stream list refreshes every 5 minutes; live status checks run every minute within a 15-minute window around the scheduled start time
 - No API key required
 
 ## Installation
@@ -78,7 +78,7 @@ Every group produces one Home Assistant device containing:
 
 ### Calendar
 
-One **`calendar.youtube_live_<group>`** entity listing upcoming live streams for that group's channels. The list is refreshed every 10 minutes.
+One **`calendar.youtube_live_<group>`** entity listing upcoming live streams for that group's channels. The list is refreshed every 5 minutes.
 
 Each event uses `<channel> - <title>` as its summary, the stream URL as its description, and the YouTube video ID as its unique ID. Events are assumed to run for 2 hours from the scheduled start; a stream that is still live keeps its event open, and once a stream ends the event's end time is trimmed to when it actually ended.
 
