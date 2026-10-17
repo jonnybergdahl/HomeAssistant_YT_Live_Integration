@@ -78,6 +78,10 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         self.channel_names: dict[str, str] = {}
         # handle (lowercased, with @) -> channel ID
         self.channel_ids: dict[str, str] = {}
+        # handle (lowercased, with @) -> subscriber count
+        self.channel_subscriber_counts: dict[str, int] = {}
+        # handles for which get_channel_info has been fetched at least once
+        self._channel_info_fetched: set[str] = set()
 
         self._last_calendar_update: datetime | None = None
         # Working state, mutated across update cycles. Each cycle snapshots
@@ -125,6 +129,8 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         self.channel_thumbnail_urls = {k: v for k, v in self.channel_thumbnail_urls.items() if k in current_keys}
         self.channel_names = {k: v for k, v in self.channel_names.items() if k in current_keys}
         self.channel_ids = {k: v for k, v in self.channel_ids.items() if k in current_keys}
+        self.channel_subscriber_counts = {k: v for k, v in self.channel_subscriber_counts.items() if k in current_keys}
+        self._channel_info_fetched = {k for k in self._channel_info_fetched if k in current_keys}
 
         try:
             streams: list[UpcomingStream] = await self.hass.async_add_executor_job(
@@ -152,15 +158,22 @@ class YouTubeLiveCoordinator(DataUpdateCoordinator[YouTubeLiveCoordinatorData]):
         # For channels without streams, fetch info directly
         for handle in self.channel_handles:
             key = self.handle_key(handle)
-            if key not in self.channel_thumbnail_urls or key not in self.channel_names:
+            needs_basic_info = key not in self.channel_thumbnail_urls or key not in self.channel_names
+            needs_subscriber_count = key not in self._channel_info_fetched
+            if needs_basic_info or needs_subscriber_count:
                 try:
                     info = await self.hass.async_add_executor_job(get_channel_info, handle)
                     if info:
-                        self.channel_names[key] = info.name
+                        # Only set name/thumbnail when not already populated from streams
+                        if needs_basic_info:
+                            self.channel_names[key] = info.name
+                            if info.thumbnail_url:
+                                self.channel_thumbnail_urls[key] = info.thumbnail_url
                         if info.channel_id:
                             self.channel_ids[key] = info.channel_id
-                        if info.thumbnail_url:
-                            self.channel_thumbnail_urls[key] = info.thumbnail_url
+                        if info.subscriber_count is not None:
+                            self.channel_subscriber_counts[key] = info.subscriber_count
+                        self._channel_info_fetched.add(key)
                 except Exception as err:
                     _LOGGER.debug("Could not fetch channel info for %s: %s", handle, err)
 

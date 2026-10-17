@@ -103,6 +103,7 @@ def mock_get_channel_info():
         name="Test Channel",
         channel_id="UC_mock_channel_id",
         thumbnail_url="https://example.com/thumb.jpg",
+        subscriber_count=1_000_000,
     )
     with (
         patch(
