@@ -183,3 +183,19 @@ async def test_group_sensor_attributes_list_live_streams(
     assert state.attributes["live_count"] == 1
     assert state.attributes["live_stream_ids"] == ["live1"]
     assert state.attributes["channel_handles"] == ["@ChannelA", "@ChannelB"]
+
+
+async def test_channel_sensor_subscriber_count_attribute(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_get_upcoming_streams,
+    mock_is_stream_live,
+) -> None:
+    """Channel sensor exposes subscriber_count as an attribute."""
+    mock_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.youtube_live_testchannel")
+    assert state is not None
+    assert state.attributes["subscriber_count"] == 1_000_000

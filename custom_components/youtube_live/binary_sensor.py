@@ -187,9 +187,11 @@ class YouTubeLiveChannelSensor(
         """Return extra state attributes."""
         is_live = self.is_on
         stream = self._next_stream() if is_live else None
+        key = self.coordinator.handle_key(self._handle)
         return {
             "channel_handle": self._handle,
             "channel_name": self._channel_name,
+            "subscriber_count": self.coordinator.channel_subscriber_counts.get(key),
             "group": self._entry.title,
             "stream_id": stream.video_id if stream else None,
             "stream_title": stream.title if stream else None,
