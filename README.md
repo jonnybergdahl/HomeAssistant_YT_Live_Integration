@@ -16,21 +16,21 @@ A Home Assistant custom integration that monitors YouTube channels for upcoming 
 
 ## Installation
 
-### HACS (recommended)
+### Marketplace (recommended)
 
-Click the button to add this repository to HACS.
+YouTube Live is available in the Home Assistant Marketplace (Home Assistant 2026.11 or newer).
+
+1. Go to **Settings** > **Marketplace**
+2. Search for **YouTube Live** and open it
+3. Select **Install**, check the version, and select **Install** again
+
+Or click the button to open YouTube Live directly in the Marketplace:
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonnybergdahl&category=Integration&repository=HomeAssistant_YT_Live_Integration)
 
-Then restart Home Assistant.
+No restart is needed. Home Assistant goes straight to the setup flow described below.
 
-You can also do the above manually:
-1. Open HACS in your Home Assistant instance
-2. Click the three-dot menu in the top right corner and select **Custom repositories**
-3. Add `https://github.com/jonnybergdahl/HomeAssistant_YT_Live_Integration` as a custom repository with category **Integration**
-4. Click **Add**
-5. Search for **YouTube Live** in HACS and click **Download**
-6. Restart Home Assistant
+> On Home Assistant 2026.10 or older, install YouTube Live through HACS instead: search for **YouTube Live**, click **Download**, then restart Home Assistant.
 
 ### Manual
 
