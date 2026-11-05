@@ -1,6 +1,7 @@
 {
     "domain": "youtube_live",
     "name": "YouTube Live",
+    "categories": ["news_social_media", "media_entertainment.tv_streaming"],
     "codeowners": ["@jonnybergdahl"],
     "config_flow": true,
     "dependencies": [],
