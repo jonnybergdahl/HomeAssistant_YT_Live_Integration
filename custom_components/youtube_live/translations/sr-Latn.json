@@ -1,0 +1,47 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Dodaj grupu YouTube kanala",
+                "description": "Kreirajte grupu YouTube kanala (npr. 'Gejming', 'Tehnologija') za praćenje prenosa uživo.",
+                "data": {
+                    "group_name": "Naziv grupe",
+                    "channel_handles": "Korisnička imena kanala (handles)"
+                },
+                "data_description": {
+                    "group_name": "Naziv za ovu grupu, koji će se koristiti kao naziv uređaja u Home Assistant-u.",
+                    "channel_handles": "Dodajte jedno ili više korisničkih imena kanala, npr. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Nije moguće povezivanje sa YouTube-om. Pokušajte ponovo kasnije.",
+            "channel_not_found": "Jedan ili više kanala nisu pronađeni na YouTube-u. Proverite korisnička imena i pokušajte ponovo (velika i mala slova su bitna).",
+            "no_channels": "Dodajte barem jedno korisničko ime kanala.",
+            "no_group_name": "Naziv grupe ne može biti prazan.",
+            "unknown": "Neočekivana greška"
+        },
+        "abort": {
+            "already_configured": "Grupa sa ovim nazivom je već konfigurisana."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Izmeni kanale u ovoj grupi",
+                "description": "Dodajte ili uklonite korisnička imena kanala iz ove grupe.",
+                "data": {
+                    "channel_handles": "Korisnička imena kanala"
+                },
+                "data_description": {
+                    "channel_handles": "Dodajte jedno ili više korisničkih imena kanala, npr. @home_assistant"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Nije moguće povezivanje sa YouTube-om. Pokušajte ponovo kasnije.",
+            "channel_not_found": "Jedan ili više kanala nisu pronađeni na YouTube-u. Proverite korisnička imena i pokušajte ponovo (velika i mala slova su bitna).",
+            "no_channels": "Dodajte barem jedno korisničko ime kanala."
+        }
+    }
+}
